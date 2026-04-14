@@ -259,6 +259,12 @@ function LandingInner() {
   const router = useRouter();
   const [showSignIn, setShowSignIn] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { user, loading } = useUser();
+
+  // Already logged in → go straight to app
+  useEffect(() => {
+    if (!loading && user) router.replace("/app");
+  }, [user, loading, router]);
 
   useEffect(() => {
     if (searchParams.get("signin") === "1") setShowSignIn(true);

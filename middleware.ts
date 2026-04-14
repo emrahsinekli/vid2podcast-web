@@ -20,9 +20,15 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
+  const pathname = request.nextUrl.pathname;
 
-  // Protect /app/* routes
-  if (!user && request.nextUrl.pathname.startsWith("/app")) {
+  // Logged-in user hits landing page → redirect to /app
+  if (user && pathname === "/") {
+    return NextResponse.redirect(new URL("/app", request.url));
+  }
+
+  // Protect /app/* routes — not logged in → back to landing with signin modal
+  if (!user && pathname.startsWith("/app")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.searchParams.set("signin", "1");
@@ -33,5 +39,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*"],
+  matcher: ["/", "/app/:path*"],
 };
