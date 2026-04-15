@@ -1,0 +1,158 @@
+{
+  "nav": {
+    "features": "Features",
+    "pricing": "Pricing",
+    "faq": "FAQ",
+    "signIn": "Sign In",
+    "addToChrome": "Start Free"
+  },
+  "hero": {
+    "badge": "Web App + Chrome Extension — Start Free",
+    "title1": "Turn Any YouTube Video",
+    "title2": "Into a Podcast",
+    "subtitle": "Instant transcript, AI summary, 50+ language translation, and natural audio playback — right in your browser or on the web.",
+    "cta1": "Start for Free",
+    "cta2": "Chrome Extension",
+    "trust": "No credit card required · Web app + Chrome extension · 50+ languages"
+  },
+  "features": {
+    "heading": "Everything you need to",
+    "headingHighlight": "learn faster",
+    "subheading": "Vid2Podcast transforms how you consume video content — turning passive watching into active learning.",
+    "items": [
+      {
+        "title": "Instant Transcript",
+        "desc": "Full transcript extracted in seconds from any YouTube video — no waiting, no sign-up required."
+      },
+      {
+        "title": "AI Summary",
+        "desc": "Multiple summary modes — TLDR, key points, detailed notes, or Twitter thread format."
+      },
+      {
+        "title": "50+ Languages",
+        "desc": "Listen in your native language. Translate transcripts into 50+ languages with one click."
+      },
+      {
+        "title": "Natural TTS",
+        "desc": "High-quality text-to-speech using browser voices (free) or Google Neural2 voices (Pro)."
+      },
+      {
+        "title": "Ask About Video",
+        "desc": "Chat with the transcript. Ask questions, get answers, and deep-dive into any topic."
+      },
+      {
+        "title": "Export Everywhere",
+        "desc": "Download as MP3, TXT, SRT, PDF. Send to Notion, Obsidian or NotebookLM."
+      }
+    ]
+  },
+  "howItWorks": {
+    "heading1": "Up and running in",
+    "heading2": "30 seconds",
+    "subheading": "No complex setup. No learning curve. Just paste and play.",
+    "steps": [
+      {
+        "num": "01",
+        "title": "Paste any YouTube URL",
+        "desc": "Copy a YouTube link and paste it into Vid2Podcast — or use the Chrome extension directly on the page."
+      },
+      {
+        "num": "02",
+        "title": "Choose language & mode",
+        "desc": "Pick your target language and summary type. We'll fetch the transcript and translate it instantly."
+      },
+      {
+        "num": "03",
+        "title": "Listen, read, and explore",
+        "desc": "Play the audio, read the transcript, get a summary, or chat with the content — all in one place."
+      }
+    ]
+  },
+  "pricing": {
+    "heading1": "Simple,",
+    "heading2": "honest pricing",
+    "subheading": "Choose the plan that works for you. Cancel anytime.",
+    "free": {
+      "name": "Free",
+      "price": "$0",
+      "desc": "Perfect for occasional use",
+      "features": [
+        "1 conversion per day",
+        "2 AI chat messages",
+        "50+ language translation",
+        "Browser TTS voices",
+        "Transcript download",
+        "AI summary (limited)"
+      ],
+      "cta": "Get Started Free"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$9.99",
+      "desc": "For power users — pay once, keep forever",
+      "features": [
+        "Unlimited conversions",
+        "Unlimited AI chat",
+        "Google Neural2 voices",
+        "All summary types",
+        "Priority processing",
+        "Conversion history",
+        "MP3, SRT, PDF export",
+        "Notion & Obsidian sync"
+      ],
+      "cta": "Upgrade to Pro",
+      "badge": "Best Value",
+      "period": "one-time"
+    }
+  },
+  "faq": {
+    "heading1": "Frequently asked",
+    "heading2": "questions",
+    "items": [
+      {
+        "q": "Is Vid2Podcast really free?",
+        "a": "Yes! The Chrome extension and web app are free to use with 1 conversion per day and limited AI chat. The Pro plan ($9.99 one-time, no subscription) removes all limits."
+      },
+      {
+        "q": "What YouTube videos does it work with?",
+        "a": "Any YouTube video that has captions available — auto-generated or manual. Most videos have auto-generated captions in at least one language."
+      },
+      {
+        "q": "How does translation work?",
+        "a": "We use server-side translation to convert the transcript to your chosen language. The translation preserves meaning and context, not just word-for-word translation."
+      },
+      {
+        "q": "What's the difference between Free and Pro?",
+        "a": "Free gives you 1 conversion/day, 2 AI chat messages, and browser TTS. Pro is a one-time payment that unlocks unlimited conversions, unlimited chat, Google Neural2 voices, and priority processing."
+      },
+      {
+        "q": "Do I need to create an account?",
+        "a": "No account needed for basic conversions. Sign in with Google to save your history, sync settings, and access Pro features."
+      },
+      {
+        "q": "Does it work on mobile?",
+        "a": "The web app at vid2podcast.com works on any device. The Chrome extension is desktop-only (Chrome, Brave, Edge)."
+      }
+    ]
+  },
+  "cta": {
+    "heading1": "Start listening smarter",
+    "heading2": "today",
+    "subheading": "Join thousands of users who save hours every week by converting YouTube videos to podcasts.",
+    "cta1": "Open Web App — Free",
+    "cta2": "Get Chrome Extension"
+  },
+  "footer": {
+    "privacy": "Privacy",
+    "support": "Support",
+    "store": "Chrome Store",
+    "rights": "All rights reserved."
+  },
+  "modal": {
+    "title": "Welcome back",
+    "subtitle": "Sign in to access your conversions and settings",
+    "googleBtn": "Sign in with Google",
+    "privacy": "By signing in you agree to our",
+    "privacyLink": "Privacy Policy"
+  }
+}

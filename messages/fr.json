@@ -1,0 +1,158 @@
+{
+  "nav": {
+    "features": "Fonctionnalités",
+    "pricing": "Tarifs",
+    "faq": "FAQ",
+    "signIn": "Se connecter",
+    "addToChrome": "Commencer gratuitement"
+  },
+  "hero": {
+    "badge": "Extension Chrome gratuite — Sans compte requis",
+    "title1": "Transformez n'importe quelle vidéo YouTube",
+    "title2": "en Podcast",
+    "subtitle": "Transcription instantanée, résumé IA, traduction en 50+ langues et audio naturel — dans votre navigateur ou sur le web.",
+    "cta1": "Commencer gratuitement",
+    "cta2": "Extension Chrome",
+    "trust": "Sans carte bancaire · Fonctionne sur Chrome, Brave, Edge · 50+ langues"
+  },
+  "features": {
+    "heading": "Tout ce qu'il vous faut pour",
+    "headingHighlight": "apprendre plus vite",
+    "subheading": "Vid2Podcast transforme votre façon de consommer le contenu vidéo — en transformant le visionnage passif en apprentissage actif.",
+    "items": [
+      {
+        "title": "Transcription instantanée",
+        "desc": "Transcription complète extraite en quelques secondes de n'importe quelle vidéo YouTube — sans attente."
+      },
+      {
+        "title": "Résumé IA",
+        "desc": "Plusieurs modes de résumé — TLDR, points clés, notes détaillées ou format fil Twitter."
+      },
+      {
+        "title": "50+ langues",
+        "desc": "Écoutez dans votre langue maternelle. Traduisez les transcriptions en 50+ langues en un clic."
+      },
+      {
+        "title": "TTS naturel",
+        "desc": "Synthèse vocale de haute qualité avec les voix du navigateur (gratuit) ou Google Neural2 (Pro)."
+      },
+      {
+        "title": "Posez des questions",
+        "desc": "Discutez avec la transcription. Posez des questions, obtenez des réponses et explorez n'importe quel sujet."
+      },
+      {
+        "title": "Exportez partout",
+        "desc": "Téléchargez en MP3, TXT, SRT, PDF. Envoyez à Notion, Obsidian ou NotebookLM."
+      }
+    ]
+  },
+  "howItWorks": {
+    "heading1": "Opérationnel en",
+    "heading2": "30 secondes",
+    "subheading": "Pas de configuration complexe. Pas de courbe d'apprentissage. Collez et lisez.",
+    "steps": [
+      {
+        "num": "01",
+        "title": "Collez n'importe quelle URL YouTube",
+        "desc": "Copiez un lien YouTube et collez-le dans Vid2Podcast — ou utilisez l'extension Chrome directement sur la page."
+      },
+      {
+        "num": "02",
+        "title": "Choisissez la langue et le mode",
+        "desc": "Sélectionnez votre langue cible et le type de résumé. Nous récupérons et traduisons la transcription instantanément."
+      },
+      {
+        "num": "03",
+        "title": "Écoutez, lisez et explorez",
+        "desc": "Lisez l'audio, lisez la transcription, obtenez un résumé ou discutez avec le contenu — tout en un seul endroit."
+      }
+    ]
+  },
+  "pricing": {
+    "heading1": "Tarifs",
+    "heading2": "simples et honnêtes",
+    "subheading": "Pas d'abonnement. Pas de surprises. Payez une fois, utilisez pour toujours.",
+    "free": {
+      "name": "Gratuit",
+      "price": "$0",
+      "desc": "Parfait pour une utilisation occasionnelle",
+      "features": [
+        "1 conversion par jour",
+        "2 messages de chat IA",
+        "Traduction en 50+ langues",
+        "Voix TTS du navigateur",
+        "Téléchargement de transcription",
+        "Résumé IA (limité)"
+      ],
+      "cta": "Commencer gratuitement"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$9.99",
+      "desc": "Pour les utilisateurs avancés — payez une fois, gardez pour toujours",
+      "features": [
+        "Conversions illimitées",
+        "Chat IA illimité",
+        "Voix Google Neural2",
+        "Tous les types de résumé",
+        "Traitement prioritaire",
+        "Historique des conversions",
+        "Export MP3, SRT, PDF",
+        "Synchronisation Notion et Obsidian"
+      ],
+      "cta": "Passer à Pro",
+      "badge": "Meilleure valeur",
+      "period": "paiement unique"
+    }
+  },
+  "faq": {
+    "heading1": "Questions",
+    "heading2": "fréquentes",
+    "items": [
+      {
+        "q": "Vid2Podcast est-il vraiment gratuit ?",
+        "a": "Oui ! L'extension Chrome et l'app web sont gratuites avec 1 conversion par jour et un chat IA limité. Le plan Pro ($9.99 unique, sans abonnement) supprime toutes les limites."
+      },
+      {
+        "q": "Avec quelles vidéos YouTube fonctionne-t-il ?",
+        "a": "Toute vidéo YouTube disposant de sous-titres — générés automatiquement ou manuels. La plupart des vidéos ont des sous-titres automatiques dans au moins une langue."
+      },
+      {
+        "q": "Comment fonctionne la traduction ?",
+        "a": "Nous utilisons une traduction côté serveur pour convertir la transcription dans votre langue choisie, en préservant le sens et le contexte."
+      },
+      {
+        "q": "Quelle est la différence entre Gratuit et Pro ?",
+        "a": "Gratuit : 1 conversion/jour, 2 messages de chat IA et TTS du navigateur. Pro est un paiement unique qui débloque des conversions illimitées, un chat illimité et les voix Google Neural2."
+      },
+      {
+        "q": "Dois-je créer un compte ?",
+        "a": "Aucun compte requis pour les conversions de base. Connectez-vous avec Google pour sauvegarder votre historique et accéder aux fonctionnalités Pro."
+      },
+      {
+        "q": "Fonctionne-t-il sur mobile ?",
+        "a": "L'app web sur vid2podcast.com fonctionne sur n'importe quel appareil. L'extension Chrome est uniquement pour ordinateur."
+      }
+    ]
+  },
+  "cta": {
+    "heading1": "Commencez à écouter",
+    "heading2": "plus intelligemment",
+    "subheading": "Rejoignez des milliers d'utilisateurs qui économisent des heures chaque semaine en convertissant des vidéos YouTube en podcasts.",
+    "cta1": "Ouvrir l app web — Gratuit",
+    "cta2": "Extension Chrome"
+  },
+  "footer": {
+    "privacy": "Confidentialité",
+    "support": "Support",
+    "store": "Chrome Store",
+    "rights": "Tous droits réservés."
+  },
+  "modal": {
+    "title": "Bon retour",
+    "subtitle": "Connectez-vous pour accéder à vos conversions et paramètres",
+    "googleBtn": "Se connecter avec Google",
+    "privacy": "En vous connectant, vous acceptez notre",
+    "privacyLink": "Politique de confidentialité"
+  }
+}

@@ -37,17 +37,45 @@ export function useUser() {
   }, []);
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase.from("users").select("*").eq("id", userId).single();
-    setProfile(data);
+    const { data: session } = await supabase.auth.getUser();
+    const email = session?.user?.email ?? "";
+
+    const { data, error } = await supabase.from("users").select("*").eq("id", userId).single();
+    if (error || !data) {
+      // Row missing — upsert a default free profile
+      await supabase.from("users").upsert({ id: userId, email: email.toLowerCase(), plan: "free" });
+      setProfile({ id: userId, email, plan: "free", settings: { defaultLanguage: "original", voiceGender: "female", voiceName: null } });
+    } else {
+      setProfile(data);
+    }
+
+    // Sync plan from subscribers table — same source as the extension (api/check)
+    // Ensures: Pro bought via extension → web app sees Pro, and vice versa
+    if (email) {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vid2podcast-backend.vercel.app";
+        const r = await fetch(`${backendUrl}/api/check?email=${encodeURIComponent(email.toLowerCase())}`);
+        if (r.ok) {
+          const { plan: realPlan } = await r.json() as { plan: string };
+          const currentPlan = data?.plan ?? "free";
+          if (realPlan && realPlan !== currentPlan) {
+            await supabase.from("users").update({ plan: realPlan }).eq("id", userId);
+            setProfile((prev) => prev ? { ...prev, plan: realPlan as "free" | "pro" } : prev);
+          }
+        }
+      } catch (_) { /* non-critical — fall back to stored plan */ }
+    }
+
     setLoading(false);
   }
 
   const isPro = profile?.plan === "pro";
 
   async function signIn() {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${siteUrl}/auth/callback` },
     });
   }
 

@@ -1,0 +1,158 @@
+{
+  "nav": {
+    "features": "Funciones",
+    "pricing": "Precios",
+    "faq": "FAQ",
+    "signIn": "Iniciar sesión",
+    "addToChrome": "Empezar gratis"
+  },
+  "hero": {
+    "badge": "Extensión Chrome gratuita — Sin cuenta necesaria",
+    "title1": "Convierte cualquier video de YouTube",
+    "title2": "en un Podcast",
+    "subtitle": "Transcripción instantánea, resumen con IA, traducción a 50+ idiomas y audio natural — en tu navegador o en la web.",
+    "cta1": "Empezar gratis",
+    "cta2": "Extensión de Chrome",
+    "trust": "Sin tarjeta de crédito · Funciona en Chrome, Brave, Edge · 50+ idiomas"
+  },
+  "features": {
+    "heading": "Todo lo que necesitas para",
+    "headingHighlight": "aprender más rápido",
+    "subheading": "Vid2Podcast transforma cómo consumes contenido de video — convirtiendo la visualización pasiva en aprendizaje activo.",
+    "items": [
+      {
+        "title": "Transcripción instantánea",
+        "desc": "Transcripción completa extraída en segundos de cualquier video de YouTube — sin esperas."
+      },
+      {
+        "title": "Resumen con IA",
+        "desc": "Múltiples modos de resumen — TLDR, puntos clave, notas detalladas o formato hilo de Twitter."
+      },
+      {
+        "title": "50+ idiomas",
+        "desc": "Escucha en tu idioma nativo. Traduce transcripciones a más de 50 idiomas con un clic."
+      },
+      {
+        "title": "TTS natural",
+        "desc": "Texto a voz de alta calidad con voces del navegador (gratis) o voces Google Neural2 (Pro)."
+      },
+      {
+        "title": "Pregunta sobre el video",
+        "desc": "Chatea con la transcripción. Haz preguntas, obtén respuestas y profundiza en cualquier tema."
+      },
+      {
+        "title": "Exporta donde quieras",
+        "desc": "Descarga como MP3, TXT, SRT, PDF. Envía a Notion, Obsidian o NotebookLM."
+      }
+    ]
+  },
+  "howItWorks": {
+    "heading1": "En funcionamiento en",
+    "heading2": "30 segundos",
+    "subheading": "Sin configuración compleja. Sin curva de aprendizaje. Solo pega y reproduce.",
+    "steps": [
+      {
+        "num": "01",
+        "title": "Pega cualquier URL de YouTube",
+        "desc": "Copia un enlace de YouTube y pégalo en Vid2Podcast — o usa la extensión de Chrome directamente en la página."
+      },
+      {
+        "num": "02",
+        "title": "Elige idioma y modo",
+        "desc": "Selecciona tu idioma de destino y tipo de resumen. Obtendremos la transcripción y la traduciremos al instante."
+      },
+      {
+        "num": "03",
+        "title": "Escucha, lee y explora",
+        "desc": "Reproduce el audio, lee la transcripción, obtén un resumen o chatea con el contenido — todo en un lugar."
+      }
+    ]
+  },
+  "pricing": {
+    "heading1": "Precios",
+    "heading2": "simples y honestos",
+    "subheading": "Sin suscripciones. Sin sorpresas. Paga una vez, úsalo siempre.",
+    "free": {
+      "name": "Gratis",
+      "price": "$0",
+      "desc": "Perfecto para uso ocasional",
+      "features": [
+        "1 conversión por día",
+        "2 mensajes de chat IA",
+        "Traducción a 50+ idiomas",
+        "Voces TTS del navegador",
+        "Descarga de transcripción",
+        "Resumen IA (limitado)"
+      ],
+      "cta": "Comenzar gratis"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$9.99",
+      "desc": "Para usuarios avanzados — pago único para siempre",
+      "features": [
+        "Conversiones ilimitadas",
+        "Chat IA ilimitado",
+        "Voces Google Neural2",
+        "Todos los tipos de resumen",
+        "Procesamiento prioritario",
+        "Historial de conversiones",
+        "Exportar MP3, SRT, PDF",
+        "Sincronización con Notion y Obsidian"
+      ],
+      "cta": "Actualizar a Pro",
+      "badge": "Mejor valor",
+      "period": "pago único"
+    }
+  },
+  "faq": {
+    "heading1": "Preguntas",
+    "heading2": "frecuentes",
+    "items": [
+      {
+        "q": "¿Es Vid2Podcast realmente gratis?",
+        "a": "¡Sí! La extensión de Chrome y la app web son gratuitas con 1 conversión por día y chat IA limitado. El plan Pro ($9.99 único, sin suscripción) elimina todos los límites."
+      },
+      {
+        "q": "¿Con qué videos de YouTube funciona?",
+        "a": "Con cualquier video de YouTube que tenga subtítulos disponibles — automáticos o manuales. La mayoría de los videos tienen subtítulos automáticos en al menos un idioma."
+      },
+      {
+        "q": "¿Cómo funciona la traducción?",
+        "a": "Usamos traducción del lado del servidor para convertir la transcripción a tu idioma elegido, preservando el significado y contexto."
+      },
+      {
+        "q": "¿Cuál es la diferencia entre Gratis y Pro?",
+        "a": "Gratis: 1 conversión/día, 2 mensajes de chat y TTS del navegador. Pro es un pago único que desbloquea conversiones ilimitadas, chat ilimitado y voces Google Neural2."
+      },
+      {
+        "q": "¿Necesito crear una cuenta?",
+        "a": "No se necesita cuenta para conversiones básicas. Inicia sesión con Google para guardar tu historial y acceder a funciones Pro."
+      },
+      {
+        "q": "¿Funciona en móvil?",
+        "a": "La app web en vid2podcast.com funciona en cualquier dispositivo. La extensión de Chrome es solo para escritorio."
+      }
+    ]
+  },
+  "cta": {
+    "heading1": "Empieza a escuchar",
+    "heading2": "de forma más inteligente",
+    "subheading": "Únete a miles de usuarios que ahorran horas cada semana convirtiendo videos de YouTube en podcasts.",
+    "cta1": "Abrir app web — Gratis",
+    "cta2": "Extensión de Chrome"
+  },
+  "footer": {
+    "privacy": "Privacidad",
+    "support": "Soporte",
+    "store": "Chrome Store",
+    "rights": "Todos los derechos reservados."
+  },
+  "modal": {
+    "title": "Bienvenido de nuevo",
+    "subtitle": "Inicia sesión para acceder a tus conversiones y configuración",
+    "googleBtn": "Iniciar sesión con Google",
+    "privacy": "Al iniciar sesión aceptas nuestra",
+    "privacyLink": "Política de privacidad"
+  }
+}

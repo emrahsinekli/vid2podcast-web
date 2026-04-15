@@ -32,69 +32,6 @@ function StatCard({ label, value, sub }: { label: string; value: React.ReactNode
   );
 }
 
-// ─── Settings Form (client island) ──────────────────────────────────────────
-// We use a plain <form> with server action pattern via /api route for now.
-// The form is rendered server-side with default values.
-function SettingsForm({
-  defaultLanguage,
-  voiceGender,
-}: {
-  defaultLanguage: string;
-  voiceGender: "female" | "male";
-}) {
-  return (
-    <form method="POST" action="/api/settings" className="space-y-4">
-      <div>
-        <label className="block text-xs font-medium text-[#a0a0b0] mb-2 uppercase tracking-wider">
-          Default Language
-        </label>
-        <div className="relative">
-          <select
-            name="defaultLanguage"
-            defaultValue={defaultLanguage}
-            className="w-full py-2.5 pl-3 pr-8 rounded-xl text-sm text-[#f0f0f5] border outline-none appearance-none"
-            style={{ background: "#0a0a0f", borderColor: "rgba(255,255,255,0.1)" }}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>{l.label}</option>
-            ))}
-          </select>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-            <svg className="w-4 h-4 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-[#a0a0b0] mb-2 uppercase tracking-wider">
-          Voice Gender
-        </label>
-        <div className="flex gap-2">
-          {(["female", "male"] as const).map((g) => (
-            <label
-              key={g}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border cursor-pointer capitalize text-sm font-medium transition-all duration-150"
-              style={{ borderColor: "rgba(255,255,255,0.1)", background: "transparent" }}
-            >
-              <input type="radio" name="voiceGender" value={g} defaultChecked={voiceGender === g} className="sr-only peer" />
-              <span className="peer-checked:text-[#a78bfa] text-[#606070] transition-colors">{g}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <button
-        type="submit"
-        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90"
-        style={{ background: "#8b5cf6" }}
-      >
-        Save Settings
-      </button>
-    </form>
-  );
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function DashboardPage() {
@@ -112,8 +49,6 @@ export default async function DashboardPage() {
 
   const profile: UserProfile = profileData ?? { plan: "free", settings: null };
   const isPro = profile.plan === "pro";
-  const defaultLanguage = profile.settings?.defaultLanguage ?? "original";
-  const voiceGender = profile.settings?.voiceGender ?? "female";
 
   // Fetch today's conversion count
   const today = new Date().toISOString().split("T")[0];
@@ -366,17 +301,22 @@ export default async function DashboardPage() {
             </div>
           )}
 
-          {/* Settings */}
-          <div className="rounded-2xl border p-6" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-            <h2 className="font-semibold text-[#f0f0f5] mb-4 flex items-center gap-2">
+          {/* Settings link */}
+          <Link
+            href="/app/settings"
+            className="flex items-center justify-between px-4 py-3 rounded-2xl border transition-all hover:bg-white/[0.03]"
+            style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-[#a0a0b0]">
               <svg className="w-4 h-4 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              Settings
-            </h2>
-            <SettingsForm defaultLanguage={defaultLanguage} voiceGender={voiceGender} />
-          </div>
+              Account Settings
+            </span>
+            <svg className="w-4 h-4 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/supabase/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -7,15 +7,33 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get("next") ?? "/app";
 
   if (code) {
-    const supabase = await createClient();
+    // Build the response first so we can set cookies on it
+    const redirectResponse = NextResponse.redirect(new URL(next, request.url));
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return request.cookies.getAll(); },
+          setAll(toSet) {
+            // Set cookies on BOTH the request (for subsequent server reads) and the redirect response
+            toSet.forEach(({ name, value }) => request.cookies.set(name, value));
+            toSet.forEach(({ name, value, options }) =>
+              redirectResponse.cookies.set(name, value, options)
+            );
+          },
+        },
+      }
+    );
+
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
-      // Sync user to our users table
       const email = data.user.email!;
       const userId = data.user.id;
 
-      // Check if user already exists
+      // Use service-role or re-create with the exchanged session for DB writes
       const { data: existing } = await supabase
         .from("users")
         .select("id, plan")
@@ -23,7 +41,6 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (!existing) {
-        // New user — check if they have a pro subscription in subscribers table
         const { data: subscriber } = await supabase
           .from("subscribers")
           .select("plan")
@@ -37,7 +54,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      return NextResponse.redirect(new URL(next, request.url));
+      return redirectResponse;
     }
   }
 

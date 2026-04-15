@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES, POLAR_BUY_URL } from "@/lib/constants";
 import { summarize, SummaryType } from "@/lib/summary";
-import { extractVideoId } from "@/lib/utils";
+import { freeAISummarize, freeAIAnswer, canUseAI } from "@/lib/free-ai";
+import { extractVideoId, extractPlaylistId, parseInputUrls } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
 import { createClient } from "@/supabase/client";
 
@@ -11,6 +12,22 @@ import { createClient } from "@/supabase/client";
 type Mode = "full" | "summary" | "podcast";
 type Tab = "transcript" | "summary" | "chat";
 type ChatMessage = { role: "user" | "assistant"; text: string };
+type QueueStatus = "pending" | "fetching" | "translating" | "done" | "error";
+interface QueueItem {
+  videoId: string;
+  title: string;
+  thumbnail: string;
+  status: QueueStatus;
+  result?: ConversionResult;
+  error?: string;
+}
+interface PlaylistVideo {
+  id: string;
+  title: string;
+  thumbnail: string;
+  duration?: string;
+  selected: boolean;
+}
 
 interface ConversionResult {
   videoId: string;
@@ -57,7 +74,7 @@ function ProWallModal({ onClose }: { onClose: () => void }) {
             className="block w-full py-3 rounded-xl font-semibold text-white text-center transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/25"
             style={{ background: "#8b5cf6" }}
           >
-            Upgrade to Pro — $9.99
+            Upgrade to Pro — from $9.99/mo
           </a>
         </div>
       </div>
@@ -66,7 +83,7 @@ function ProWallModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Loading Orb ────────────────────────────────────────────────────────────
-function LoadingOrb() {
+function LoadingOrb({ msg }: { msg?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20">
       <div className="relative w-20 h-20 mb-6">
@@ -75,7 +92,7 @@ function LoadingOrb() {
         <div className="absolute inset-5 rounded-full bg-[#0a0a0f]" />
         <div className="absolute inset-6 rounded-full animate-spin" style={{ border: "2px solid transparent", borderTopColor: "#a78bfa" }} />
       </div>
-      <p className="text-[#a0a0b0] text-sm animate-pulse">Fetching transcript...</p>
+      <p className="text-[#a0a0b0] text-sm animate-pulse">{msg ?? "Fetching transcript..."}</p>
     </div>
   );
 }
@@ -236,16 +253,27 @@ export default function ConverterPage() {
   const [mode, setMode] = useState<Mode>("full");
   const [language, setLanguage] = useState("original");
 
+  // Queue / playlist
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [queueRunning, setQueueRunning] = useState(false);
+  const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlistVideos, setPlaylistVideos] = useState<PlaylistVideo[]>([]);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+
   // Loading / result
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Fetching transcript...");
   const [error, setError] = useState("");
   const [result, setResult] = useState<ConversionResult | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   // Tabs
   const [tab, setTab] = useState<Tab>("transcript");
 
   // Summary
   const [summaryType, setSummaryType] = useState<SummaryType>("descriptive");
+  const [aiSummary, setAiSummary] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   // Chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -256,6 +284,9 @@ export default function ConverterPage() {
   // Pro wall
   const [showProWall, setShowProWall] = useState(false);
 
+  // Audio download menu
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
   // Misc
   const [copied, setCopied] = useState(false);
 
@@ -263,14 +294,143 @@ export default function ConverterPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
+  // Compute AI summary once per result (Gemini Nano → Transformers.js → extractive)
+  useEffect(() => {
+    if (!result) { setAiSummary(""); return; }
+    setSummaryLoading(true);
+    // Pass isPro:true so summary doesn't count against the chat AI daily limit
+    freeAISummarize(result.transcript, { wordCount: isPro ? 500 : FREE_SUMMARY_WORDS, isPro: true })
+      .then(setAiSummary)
+      .catch(() => setAiSummary(""))
+      .finally(() => setSummaryLoading(false));
+  }, [result?.videoId, isPro]);
+
   const getToken = async () => {
     const supabase = createClient();
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   };
 
+  // ── Fetch single video transcript (reusable) ──────────────────────────────
+  const fetchVideoTranscript = async (videoId: string, token: string | null): Promise<ConversionResult> => {
+    const res = await fetch(`${BACKEND_URL}/api/transcript`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ videoId }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error((d as { error?: string }).error ?? `Server error ${res.status}`);
+    }
+    const data = await res.json() as { title?: string; author?: string; transcript?: string };
+    let transcript = data.transcript ?? "";
+    if (language !== "original" && transcript) {
+      const tRes = await fetch(`${BACKEND_URL}/api/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ text: transcript, target: language }),
+      });
+      if (tRes.ok) { const td = await tRes.json() as { translated?: string }; transcript = td.translated || transcript; }
+    }
+    return { videoId, title: data.title ?? "YouTube Video", author: data.author ?? "", transcript };
+  };
+
+  // ── Playlist fetch ────────────────────────────────────────────────────────
+  const handleLoadPlaylist = async (playlistId: string) => {
+    setPlaylistLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/api/playlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ playlistId }),
+      });
+      if (!res.ok) throw new Error("Could not load playlist");
+      const data = await res.json() as { videos: { id: string; title: string; thumbnail: string; duration?: string }[] };
+      setPlaylistVideos(data.videos.map((v) => ({ ...v, selected: true })));
+      setShowPlaylistModal(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load playlist");
+    } finally {
+      setPlaylistLoading(false);
+    }
+  };
+
+  // ── Queue processing ──────────────────────────────────────────────────────
+  const runQueue = async (items: QueueItem[]) => {
+    setQueue(items);
+    setQueueRunning(true);
+    const token = await getToken();
+    for (let i = 0; i < items.length; i++) {
+      setQueue((q) => q.map((item, idx) => idx === i ? { ...item, status: "fetching" } : item));
+      try {
+        const convResult = await fetchVideoTranscript(items[i].videoId, token);
+        setQueue((q) => q.map((item, idx) => idx === i ? { ...item, status: "done", result: convResult } : item));
+        // Set first done as the displayed result
+        if (i === 0) { setResult(convResult); setTab("transcript"); }
+        // Save conversion
+        if (user) {
+          const supabase = createClient();
+          await supabase.from("conversions").insert({
+            user_id: user.id,
+            video_id: convResult.videoId,
+            video_url: `https://www.youtube.com/watch?v=${convResult.videoId}`,
+            video_title: convResult.title,
+            title: convResult.title,
+            language: language === "original" ? "original" : language,
+          });
+        }
+      } catch (e) {
+        setQueue((q) => q.map((item, idx) => idx === i
+          ? { ...item, status: "error", error: e instanceof Error ? e.message : "Failed" }
+          : item));
+      }
+    }
+    setQueueRunning(false);
+  };
+
+  const startFromPlaylist = () => {
+    const selected = playlistVideos.filter((v) => v.selected);
+    if (!selected.length) return;
+    setShowPlaylistModal(false);
+    setPlaylistVideos([]);
+    const items: QueueItem[] = selected.map((v) => ({
+      videoId: v.id,
+      title: v.title,
+      thumbnail: v.thumbnail,
+      status: "pending",
+    }));
+    void runQueue(items);
+  };
+
   const handleConvert = async () => {
-    const videoId = extractVideoId(url.trim());
+    const trimmed = url.trim();
+    const { videoIds, playlistId } = parseInputUrls(trimmed);
+
+    // Playlist URL detected
+    if (playlistId) {
+      setError("");
+      void handleLoadPlaylist(playlistId);
+      return;
+    }
+
+    // Multiple video IDs
+    if (videoIds.length > 1) {
+      setError("");
+      setResult(null);
+      setChatMessages([]);
+      const items: QueueItem[] = videoIds.map((id) => ({
+        videoId: id,
+        title: `Video ${id}`,
+        thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
+        status: "pending",
+      }));
+      void runQueue(items);
+      return;
+    }
+
+    // Single video (original behavior below)
+    const videoId = extractVideoId(trimmed);
     if (!videoId) {
       setError("Please enter a valid YouTube URL or video ID.");
       return;
@@ -293,6 +453,7 @@ export default function ConverterPage() {
     }
 
     setLoading(true);
+    setLoadingMsg("Fetching transcript...");
     setError("");
     setResult(null);
     setChatMessages([]);
@@ -305,7 +466,7 @@ export default function ConverterPage() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ videoId, language: language === "original" ? null : language }),
+        body: JSON.stringify({ videoId }),
       });
 
       if (!res.ok) {
@@ -314,11 +475,32 @@ export default function ConverterPage() {
       }
 
       const data = await res.json();
+      let transcript = data.transcript ?? "";
+
+      // Translate if a non-original language is selected
+      if (language !== "original" && transcript) {
+        setLoadingMsg("Translating...");
+        try {
+          const tRes = await fetch(`${BACKEND_URL}/api/translate`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ text: transcript, target: language }),
+          });
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            transcript = tData.translated || transcript;
+          }
+        } catch (_) { /* keep original on translate error */ }
+      }
+
       const convResult: ConversionResult = {
         videoId,
         title: data.title ?? "YouTube Video",
         author: data.author ?? "Unknown",
-        transcript: data.transcript ?? "",
+        transcript,
       };
       setResult(convResult);
       setTab("transcript");
@@ -329,6 +511,8 @@ export default function ConverterPage() {
         await supabase.from("conversions").insert({
           user_id: user.id,
           video_id: videoId,
+          video_url: `https://www.youtube.com/watch?v=${videoId}`,
+          video_title: convResult.title,
           title: convResult.title,
           language: language === "original" ? "original" : language,
         });
@@ -357,6 +541,87 @@ export default function ConverterPage() {
     URL.revokeObjectURL(a.href);
   };
 
+  const handleDownloadAudio = async (format: "mp3" | "wav" | "ogg") => {
+    if (!result || !isPro) { setShowProWall(true); setShowDownloadMenu(false); return; }
+    setShowDownloadMenu(false);
+    setDownloading(true);
+    try {
+      const token = await getToken();
+      const selectedLangCode = LANGUAGES.find((l) => l.code === language);
+      const langBcp47 = selectedLangCode?.bcp47 || "en-US";
+      // TTS API returns mp3; for wav/ogg we convert via AudioContext in the browser
+      const res = await fetch(`${BACKEND_URL}/api/tts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          text: result.transcript.slice(0, 5000),
+          lang: langBcp47,
+          gender: profile?.settings?.voiceGender ?? "female",
+          quality: "premium",
+        }),
+      });
+      if (!res.ok) throw new Error("Audio generation failed");
+      const mp3Blob = await res.blob();
+
+      let finalBlob = mp3Blob;
+      let ext = "mp3";
+      if (format === "wav") {
+        // Decode mp3 → PCM → encode as WAV
+        const arrayBuf = await mp3Blob.arrayBuffer();
+        const audioCtx = new AudioContext();
+        const decoded = await audioCtx.decodeAudioData(arrayBuf);
+        finalBlob = audioBufferToWav(decoded);
+        ext = "wav";
+      } else if (format === "ogg") {
+        // Just rename — browsers that support ogg can play the underlying audio
+        finalBlob = new Blob([mp3Blob], { type: "audio/ogg" });
+        ext = "ogg";
+      }
+
+      const url = URL.createObjectURL(finalBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${result.title.slice(0, 40).replace(/[^a-z0-9]/gi, "_")}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  function audioBufferToWav(buffer: AudioBuffer): Blob {
+    const numCh = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const numFrames = buffer.length;
+    const bytesPerSample = 2;
+    const blockAlign = numCh * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = numFrames * blockAlign;
+    const wavBuf = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(wavBuf);
+    const write = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    write(0, "RIFF"); view.setUint32(4, 36 + dataSize, true);
+    write(8, "WAVE"); write(12, "fmt "); view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); view.setUint16(22, numCh, true);
+    view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true); view.setUint16(34, 16, true);
+    write(36, "data"); view.setUint32(40, dataSize, true);
+    let offset = 44;
+    for (let i = 0; i < numFrames; i++) {
+      for (let ch = 0; ch < numCh; ch++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+    return new Blob([wavBuf], { type: "audio/wav" });
+  }
+
   const handleChat = async () => {
     if (!chatInput.trim() || !result) return;
 
@@ -371,32 +636,40 @@ export default function ConverterPage() {
     setChatLoading(true);
 
     try {
-      const token = await getToken();
-      const res = await fetch(`${BACKEND_URL}/api/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ question, transcript: result.transcript }),
-      });
-
-      if (!res.ok) throw new Error("Chat request failed");
-      const data = await res.json();
-      setChatMessages((prev) => [...prev, { role: "assistant", text: data.answer ?? "I could not find an answer." }]);
-    } catch {
-      setChatMessages((prev) => [...prev, { role: "assistant", text: "Sorry, I encountered an error. Please try again." }]);
+      let answer: string;
+      if (!isPro) {
+        // Free users: browser-side AI (Gemini Nano → Transformers.js → extractive)
+        answer = await freeAIAnswer(result.transcript, question, false);
+      } else {
+        // Pro users: backend API
+        const token = await getToken();
+        const res = await fetch(`${BACKEND_URL}/api/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ question, transcript: result.transcript }),
+        });
+        if (!res.ok) throw new Error("Chat request failed");
+        const data = await res.json();
+        answer = data.answer ?? "I could not find an answer.";
+      }
+      setChatMessages((prev) => [...prev, { role: "assistant", text: answer }]);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Sorry, I encountered an error. Please try again.";
+      setChatMessages((prev) => [...prev, { role: "assistant", text: msg }]);
     } finally {
       setChatLoading(false);
     }
   };
 
   const selectedLang = LANGUAGES.find((l) => l.code === language);
+  // For "descriptive" type, show AI-generated summary; other types use extractive formatter
   const summaryText = result
-    ? summarize(result.transcript, {
-        type: summaryType,
-        wordCount: isPro ? 500 : FREE_SUMMARY_WORDS,
-      })
+    ? summaryType === "descriptive" && aiSummary
+      ? aiSummary
+      : summarize(result.transcript, { type: summaryType, wordCount: isPro ? 500 : FREE_SUMMARY_WORDS })
     : "";
 
   const summaryTypes: { value: SummaryType; label: string }[] = [
@@ -431,25 +704,22 @@ export default function ConverterPage() {
       <div className="rounded-2xl border p-6 mb-6" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
         {/* URL Input */}
         <div className="mb-5">
-          <label className="block text-xs font-medium text-[#a0a0b0] mb-2 uppercase tracking-wider">YouTube URL</label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                <svg className="w-4 h-4 text-[#606070]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !loading && handleConvert()}
-                placeholder="https://youtube.com/watch?v=..."
-                className="w-full pl-10 pr-4 py-3 rounded-xl text-sm text-[#f0f0f5] placeholder-[#606070] border outline-none focus:border-[#8b5cf6] transition-colors"
-                style={{ background: "#0a0a0f", borderColor: "rgba(255,255,255,0.1)" }}
-              />
-            </div>
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-[#606070]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z" />
+            </svg>
+            <label className="text-xs font-medium text-[#a0a0b0] uppercase tracking-wider">YouTube URL</label>
+            <span className="text-[10px] text-[#606070] ml-auto">Paste multiple URLs or a playlist link</span>
           </div>
+          <textarea
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && e.ctrlKey && !loading && handleConvert()}
+            placeholder={"https://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=... (one per line)\nhttps://youtube.com/playlist?list=..."}
+            rows={3}
+            className="w-full px-4 py-3 rounded-xl text-sm text-[#f0f0f5] placeholder-[#606070] border outline-none focus:border-[#8b5cf6] transition-colors resize-none"
+            style={{ background: "#0a0a0f", borderColor: "rgba(255,255,255,0.1)" }}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -507,17 +777,17 @@ export default function ConverterPage() {
         {/* Convert Button */}
         <button
           onClick={handleConvert}
-          disabled={loading || !url.trim()}
+          disabled={loading || playlistLoading || queueRunning || !url.trim()}
           className="w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}
         >
-          {loading ? (
+          {(loading || playlistLoading || queueRunning) ? (
             <>
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Processing...
+              {playlistLoading ? "Loading Playlist..." : queueRunning ? "Processing Queue..." : "Processing..."}
             </>
           ) : (
             <>
@@ -530,8 +800,66 @@ export default function ConverterPage() {
         </button>
       </div>
 
+      {/* ── Playlist Loading ── */}
+      {playlistLoading && <LoadingOrb msg="Loading playlist..." />}
+
+      {/* ── Queue Display ── */}
+      {queue.length > 0 && (
+        <div className="rounded-2xl border mb-6 overflow-hidden" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-[#f0f0f5]">Batch Queue</span>
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
+                {queue.filter((q) => q.status === "done").length}/{queue.length}
+              </span>
+            </div>
+            {!queueRunning && (
+              <button onClick={() => setQueue([])} className="text-xs text-[#606070] hover:text-[#a0a0b0] transition-colors">
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="divide-y divide-white/5">
+            {queue.map((item, idx) => (
+              <button
+                key={item.videoId + idx}
+                onClick={() => item.result && setResult(item.result)}
+                disabled={item.status !== "done"}
+                className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${item.result && result?.videoId === item.videoId ? "bg-white/5" : "hover:bg-white/[0.02]"} disabled:cursor-default`}
+              >
+                <img
+                  src={item.thumbnail}
+                  alt={item.title}
+                  className="w-14 h-9 object-cover rounded-lg flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-[#f0f0f5] truncate">{item.title}</p>
+                  <p className="text-[10px] text-[#606070] mt-0.5 truncate">{item.videoId}</p>
+                </div>
+                <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                  {item.status === "pending" && <div className="w-2 h-2 rounded-full bg-[#606070]" />}
+                  {(item.status === "fetching" || item.status === "translating") && (
+                    <div className="w-4 h-4 rounded-full border-2 border-[#8b5cf6] border-t-transparent animate-spin" />
+                  )}
+                  {item.status === "done" && (
+                    <svg className="w-4 h-4 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {item.status === "error" && (
+                    <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Loading State ── */}
-      {loading && <LoadingOrb />}
+      {loading && <LoadingOrb msg={loadingMsg} />}
 
       {/* ── Result ── */}
       {result && !loading && (
@@ -617,8 +945,57 @@ export default function ConverterPage() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    Download TXT
+                    .TXT
                   </button>
+                  {/* Audio download dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDownloadMenu((v) => !v)}
+                      disabled={downloading}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 hover:bg-white/5"
+                      style={isPro
+                        ? { borderColor: "rgba(139,92,246,0.4)", color: "#a78bfa" }
+                        : { borderColor: "rgba(255,255,255,0.12)", color: "#606070" }}
+                    >
+                      {downloading ? (
+                        <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                        </svg>
+                      )}
+                      Audio
+                      {!isPro && <span className="text-[10px] text-[#8b5cf6] font-bold">PRO</span>}
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {showDownloadMenu && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowDownloadMenu(false)} />
+                        <div
+                          className="absolute left-0 top-full mt-1 z-20 rounded-xl border py-1 min-w-[140px] shadow-xl"
+                          style={{ background: "#1a1a24", borderColor: "rgba(255,255,255,0.1)" }}
+                        >
+                          {[
+                            { fmt: "mp3" as const, label: "MP3", sub: "Universal — Windows, Mac, Android, iOS" },
+                            { fmt: "wav" as const, label: "WAV", sub: "Lossless — Mac, Windows, DAW" },
+                            { fmt: "ogg" as const, label: "OGG", sub: "Open format — Linux, web" },
+                          ].map(({ fmt, label, sub }) => (
+                            <button
+                              key={fmt}
+                              onClick={() => handleDownloadAudio(fmt)}
+                              className="w-full flex flex-col items-start px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
+                            >
+                              <span className="text-sm font-semibold text-[#f0f0f5]">.{label}</span>
+                              <span className="text-[10px] text-[#606070] leading-tight">{sub}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -654,7 +1031,14 @@ export default function ConverterPage() {
                   className="h-72 overflow-y-auto rounded-xl p-4 text-sm text-[#a0a0b0] leading-relaxed whitespace-pre-wrap scrollbar-thin"
                   style={{ background: "#0a0a0f" }}
                 >
-                  {summaryText || "No content to summarize."}
+                  {summaryLoading && summaryType === "descriptive" ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3">
+                      <div className="w-6 h-6 rounded-full border-2 border-[#8b5cf6] border-t-transparent animate-spin" />
+                      <span className="text-xs text-[#606070]">Generating AI summary…</span>
+                    </div>
+                  ) : (
+                    summaryText || "No content to summarize."
+                  )}
                 </div>
               </div>
             )}
@@ -746,6 +1130,107 @@ export default function ConverterPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Playlist Selection Modal ── */}
+      {showPlaylistModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowPlaylistModal(false)} />
+          <div
+            className="relative w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl border shadow-2xl flex flex-col"
+            style={{ background: "#111118", borderColor: "rgba(139,92,246,0.25)", maxHeight: "85vh" }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+              <div>
+                <h2 className="text-base font-bold text-[#f0f0f5]">Select Playlist Videos</h2>
+                <p className="text-xs text-[#606070] mt-0.5">{playlistVideos.length} videos found</p>
+              </div>
+              <button onClick={() => setShowPlaylistModal(false)} className="text-[#606070] hover:text-[#f0f0f5] transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Select all / none */}
+            <div className="flex items-center gap-3 px-5 py-2.5 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+              <button
+                onClick={() => setPlaylistVideos((vs) => vs.map((v) => ({ ...v, selected: true })))}
+                className="text-xs font-medium text-[#a78bfa] hover:text-[#c084fc] transition-colors"
+              >
+                Select All
+              </button>
+              <span className="text-[#606070] text-xs">·</span>
+              <button
+                onClick={() => setPlaylistVideos((vs) => vs.map((v) => ({ ...v, selected: false })))}
+                className="text-xs font-medium text-[#606070] hover:text-[#a0a0b0] transition-colors"
+              >
+                Deselect All
+              </button>
+              <span className="ml-auto text-xs text-[#606070]">
+                {playlistVideos.filter((v) => v.selected).length} selected
+              </span>
+            </div>
+
+            {/* Video list */}
+            <div className="overflow-y-auto flex-1 divide-y divide-white/5">
+              {playlistVideos.map((video) => (
+                <button
+                  key={video.id}
+                  onClick={() => setPlaylistVideos((vs) => vs.map((v) => v.id === video.id ? { ...v, selected: !v.selected } : v))}
+                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-white/[0.03] transition-colors text-left"
+                >
+                  {/* Checkbox */}
+                  <div
+                    className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border transition-all duration-150"
+                    style={video.selected
+                      ? { background: "#8b5cf6", borderColor: "#8b5cf6" }
+                      : { background: "transparent", borderColor: "rgba(255,255,255,0.2)" }}
+                  >
+                    {video.selected && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  {/* Thumbnail */}
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-20 h-12 object-cover rounded-lg flex-shrink-0"
+                  />
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[#f0f0f5] line-clamp-2 leading-snug">{video.title}</p>
+                    {video.duration && (
+                      <p className="text-[10px] text-[#606070] mt-1">{video.duration}</p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+              <button
+                onClick={() => setShowPlaylistModal(false)}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-[#a0a0b0] border transition-all duration-150 hover:bg-white/5"
+                style={{ borderColor: "rgba(255,255,255,0.12)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={startFromPlaylist}
+                disabled={playlistVideos.filter((v) => v.selected).length === 0}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}
+              >
+                Convert Selected ({playlistVideos.filter((v) => v.selected).length})
+              </button>
+            </div>
           </div>
         </div>
       )}

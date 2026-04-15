@@ -1,0 +1,158 @@
+{
+  "nav": {
+    "features": "Özellikler",
+    "pricing": "Fiyatlar",
+    "faq": "SSS",
+    "signIn": "Giriş Yap",
+    "addToChrome": "Ücretsiz Başla"
+  },
+  "hero": {
+    "badge": "Web Uygulaması + Chrome Eklentisi — Ücretsiz Başla",
+    "title1": "YouTube Videolarını",
+    "title2": "Podcast'e Çevir",
+    "subtitle": "Anında transkript, AI özeti, 50+ dilde çeviri ve doğal ses — tarayıcında veya web'de.",
+    "cta1": "Ücretsiz Başla",
+    "cta2": "Chrome Eklentisi",
+    "trust": "Kredi kartı gerekmez · Web uygulaması + Chrome eklentisi · 50+ dil"
+  },
+  "features": {
+    "heading": "Daha hızlı öğrenmek için",
+    "headingHighlight": "ihtiyacın olan her şey",
+    "subheading": "Vid2Podcast, video içeriği tüketme şeklini dönüştürür — pasif izlemeyi aktif öğrenmeye çevirir.",
+    "items": [
+      {
+        "title": "Anında Transkript",
+        "desc": "Herhangi bir YouTube videosundan saniyeler içinde tam transkript — bekleme yok, kayıt gerekmez."
+      },
+      {
+        "title": "AI Özeti",
+        "desc": "Birden fazla özet modu — TLDR, anahtar noktalar, ayrıntılı notlar veya Twitter dizisi formatı."
+      },
+      {
+        "title": "50+ Dil",
+        "desc": "Kendi dilinde dinle. Transkriptleri tek tıkla 50'den fazla dile çevir."
+      },
+      {
+        "title": "Doğal Ses",
+        "desc": "Tarayıcı sesleriyle (ücretsiz) veya Google Neural2 sesleriyle (Pro) yüksek kaliteli metinden sese."
+      },
+      {
+        "title": "Video Hakkında Sor",
+        "desc": "Transkriptle sohbet et. Sorular sor, cevaplar al ve herhangi bir konuya derinlemesine gir."
+      },
+      {
+        "title": "Her Yere Dışa Aktar",
+        "desc": "MP3, TXT, SRT, PDF olarak indir. Notion, Obsidian veya NotebookLM'ye gönder."
+      }
+    ]
+  },
+  "howItWorks": {
+    "heading1": "Başlamak için",
+    "heading2": "30 saniye",
+    "subheading": "Karmaşık kurulum yok. Öğrenme eğrisi yok. Sadece yapıştır ve oynat.",
+    "steps": [
+      {
+        "num": "01",
+        "title": "YouTube URL'si yapıştır",
+        "desc": "Bir YouTube bağlantısı kopyalayıp Vid2Podcast'e yapıştır — veya Chrome eklentisini sayfada direkt kullan."
+      },
+      {
+        "num": "02",
+        "title": "Dil ve mod seç",
+        "desc": "Hedef dilinizi ve özet türünü seçin. Transkripti anında çekip çevireceğiz."
+      },
+      {
+        "num": "03",
+        "title": "Dinle, oku ve keşfet",
+        "desc": "Sesi oynat, transkripti oku, özet al veya içerikle sohbet et — hepsi tek bir yerde."
+      }
+    ]
+  },
+  "pricing": {
+    "heading1": "Sade ve",
+    "heading2": "dürüst fiyatlar",
+    "subheading": "Sana uygun planı seç. İstediğin zaman iptal et.",
+    "free": {
+      "name": "Ücretsiz",
+      "price": "$0",
+      "desc": "Ara sıra kullanım için mükemmel",
+      "features": [
+        "Günde 1 dönüştürme",
+        "2 AI sohbet mesajı",
+        "50+ dil çevirisi",
+        "Tarayıcı TTS sesleri",
+        "Transkript indirme",
+        "AI özeti (sınırlı)"
+      ],
+      "cta": "Ücretsiz Başla"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$9.99",
+      "desc": "Güçlü kullanıcılar için — bir kez öde, sonsuza kadar kullan",
+      "features": [
+        "Sınırsız dönüştürme",
+        "Sınırsız AI sohbeti",
+        "Google Neural2 sesleri",
+        "Tüm özet türleri",
+        "Öncelikli işleme",
+        "Dönüştürme geçmişi",
+        "MP3, SRT, PDF dışa aktar",
+        "Notion ve Obsidian entegrasyonu"
+      ],
+      "cta": "Pro'ya Yükselt",
+      "badge": "En İyi Değer",
+      "period": "tek seferlik"
+    }
+  },
+  "faq": {
+    "heading1": "Sık sorulan",
+    "heading2": "sorular",
+    "items": [
+      {
+        "q": "Vid2Podcast gerçekten ücretsiz mi?",
+        "a": "Evet! Chrome eklentisi ve web uygulaması günde 1 dönüştürme ve sınırlı AI sohbetiyle ücretsiz kullanılabilir. Pro plan ($9.99 tek seferlik, abonelik yok) tüm limitleri kaldırır."
+      },
+      {
+        "q": "Hangi YouTube videoları çalışır?",
+        "a": "Altyazıları olan herhangi bir YouTube videosu — otomatik oluşturulmuş veya manuel. Çoğu videoda en az bir dilde otomatik altyazı bulunur."
+      },
+      {
+        "q": "Çeviri nasıl çalışır?",
+        "a": "Transkripti seçtiğiniz dile çevirmek için sunucu taraflı çeviri kullanırız. Çeviri, kelime kelime değil, anlam ve bağlamı korur."
+      },
+      {
+        "q": "Ücretsiz ve Pro arasındaki fark nedir?",
+        "a": "Ücretsiz: günde 1 dönüştürme, 2 AI sohbet mesajı ve tarayıcı TTS. Pro, tek seferlik bir ödemeyle sınırsız dönüştürme, sohbet ve Google Neural2 seslerini açar."
+      },
+      {
+        "q": "Hesap oluşturmam gerekiyor mu?",
+        "a": "Temel dönüştürmeler için hesap gerekmez. Geçmişini kaydetmek ve Pro özelliklerine erişmek için Google ile giriş yap."
+      },
+      {
+        "q": "Mobilde çalışır mı?",
+        "a": "vid2podcast.com'daki web uygulaması her cihazda çalışır. Chrome eklentisi yalnızca masaüstü içindir (Chrome, Brave, Edge)."
+      }
+    ]
+  },
+  "cta": {
+    "heading1": "Daha akıllıca dinlemeye",
+    "heading2": "bugün başla",
+    "subheading": "YouTube videolarını podcast'e dönüştürerek her hafta saatler kazanan binlerce kullanıcıya katıl.",
+    "cta1": "Web Uygulamasını Aç — Ücretsiz",
+    "cta2": "Chrome Eklentisini İndir"
+  },
+  "footer": {
+    "privacy": "Gizlilik",
+    "support": "Destek",
+    "store": "Chrome Store",
+    "rights": "Tüm hakları saklıdır."
+  },
+  "modal": {
+    "title": "Tekrar hoş geldin",
+    "subtitle": "Dönüştürmelerine ve ayarlarına erişmek için giriş yap",
+    "googleBtn": "Google ile Giriş Yap",
+    "privacy": "Giriş yaparak",
+    "privacyLink": "Gizlilik Politikamızı"
+  }
+}
