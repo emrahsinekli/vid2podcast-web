@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { UserProvider } from "@/components/UserProvider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "latin-ext"] });
@@ -193,7 +194,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={inter.className}>
         <ThemeProvider>
-          {children}
+          <UserProvider>
+            {children}
+          </UserProvider>
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />

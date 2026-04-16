@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 import { POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
 
 // ─── Sign In Modal ─────────────────────────────────────────────────────────────

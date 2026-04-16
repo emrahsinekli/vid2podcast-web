@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 import { POLAR_BUY_URL } from "@/lib/constants";
 
 // ─── Sign In Modal ─────────────────────────────────────────────────────────────

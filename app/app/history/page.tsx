@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/supabase/client";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 import { LANGUAGES, POLAR_BUY_URL } from "@/lib/constants";
 
 interface Conversion {

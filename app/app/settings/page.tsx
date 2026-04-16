@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 import { LANGUAGES } from "@/lib/constants";
 import { createClient } from "@/supabase/client";
 

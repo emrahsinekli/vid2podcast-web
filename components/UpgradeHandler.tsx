@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 import { BACKEND_URL, POLAR_BUY_URL } from "@/lib/constants";
 
 export function UpgradeHandler() {

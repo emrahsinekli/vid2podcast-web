@@ -5,7 +5,7 @@ import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES
 import { summarize, SummaryType } from "@/lib/summary";
 import { freeAISummarize, freeAIAnswer, canUseAI } from "@/lib/free-ai";
 import { extractVideoId, extractPlaylistId, parseInputUrls } from "@/lib/utils";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 import { createClient } from "@/supabase/client";
 
 // ─── IndexedDB Audio Cache ───────────────────────────────────────────────────

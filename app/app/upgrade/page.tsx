@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/UserProvider";
 
 const plans = [
   {
