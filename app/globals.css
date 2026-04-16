@@ -97,6 +97,17 @@ body {
 
 /* ── Animations ── */
 @keyframes spin     { to { transform: rotate(360deg); } }
+@keyframes logo-spin-decel {
+  0%   { transform: rotate(0deg); }
+  30%  { transform: rotate(540deg); }
+  60%  { transform: rotate(900deg); }
+  80%  { transform: rotate(1020deg); }
+  92%  { transform: rotate(1060deg); }
+  100% { transform: rotate(1080deg); }
+}
+.logo-spin-once {
+  animation: logo-spin-decel 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
 @keyframes shimmer  { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 @keyframes fadeIn   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes slideUp  { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
