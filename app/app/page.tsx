@@ -692,7 +692,6 @@ function AudioPlayer({
           )}
         </div>
       </div>
-      </div>
 
       {isTruncated && (
         <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "var(--text3)" }}>
