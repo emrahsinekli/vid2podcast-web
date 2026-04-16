@@ -373,7 +373,7 @@ function LandingInner() {
               Sign In
             </button>
             <a
-              href="https://chrome.google.com/webstore"
+              href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/25"
@@ -416,7 +416,7 @@ function LandingInner() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <a
-              href="https://chrome.google.com/webstore"
+              href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-3 px-8 py-4 rounded-xl font-semibold text-white text-lg transition-all duration-200 hover:opacity-90 hover:shadow-xl hover:shadow-purple-500/30 hover:-translate-y-0.5"
@@ -545,7 +545,7 @@ function LandingInner() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <a
-                href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer"
+                href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer"
                 className="px-8 py-4 rounded-xl font-semibold text-white text-lg transition-all duration-200 hover:opacity-90 hover:shadow-xl hover:shadow-purple-500/30"
                 style={{ background: "#8b5cf6" }}
               >
@@ -571,7 +571,7 @@ function LandingInner() {
             {[
               { label: "Privacy", href: "/privacy" },
               { label: "Support", href: "mailto:support@vid2podcast.com" },
-              { label: "Chrome Store", href: "https://chrome.google.com/webstore" },
+              { label: "Chrome Store", href: "https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" },
             ].map((link) => (
               <a key={link.label} href={link.href}
                 className="text-sm text-[#606070] hover:text-[#a0a0b0] transition-colors"

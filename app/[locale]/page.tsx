@@ -390,7 +390,7 @@ function LandingInner() {
             <a href="#faq" className="text-sm text-[#a0a0b0] hover:text-[#f0f0f5] transition-colors">{tNav("faq")}</a>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer"
+            <a href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer"
               className="hidden sm:flex items-center gap-1.5 text-sm text-[#606070] hover:text-[#a0a0b0] transition-colors px-3 py-1.5">
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" /></svg>
               Chrome
@@ -446,7 +446,7 @@ function LandingInner() {
             </button>
             {/* Chrome extension — SECONDARY */}
             <a
-              href="https://chrome.google.com/webstore"
+              href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-[#a0a0b0] text-lg border transition-all duration-200 hover:text-[#f0f0f5] hover:bg-white/5 hover:-translate-y-0.5"
@@ -600,7 +600,7 @@ function LandingInner() {
               >
                 {tCta("cta1")}
               </button>
-              <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer"
+              <a href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer"
                 className="px-8 py-4 rounded-xl font-semibold border text-[#a0a0b0] text-lg transition-all duration-200 hover:text-[#f0f0f5] hover:bg-white/5"
                 style={{ borderColor: "rgba(255,255,255,0.15)" }}>
                 {tCta("cta2")}
@@ -624,7 +624,7 @@ function LandingInner() {
             <a href="mailto:support@vid2podcast.com" className="text-sm text-[#606070] hover:text-[#a0a0b0] transition-colors">
               {tFooter("support")}
             </a>
-            <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer" className="text-sm text-[#606070] hover:text-[#a0a0b0] transition-colors">
+            <a href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer" className="text-sm text-[#606070] hover:text-[#a0a0b0] transition-colors">
               {tFooter("store")}
             </a>
           </div>
