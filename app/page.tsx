@@ -356,7 +356,9 @@ function LandingInner() {
       >
         <div className="max-w-7xl mx-auto px-6 flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <Image src="/logo.png" alt="Vid2Podcast" width={32} height={32} className="rounded-lg logo-spin-once" />
+            <div className="logo-spin-once" style={{ width: 32, height: 32, flexShrink: 0 }}>
+              <Image src="/logo.png" alt="Vid2Podcast" width={32} height={32} className="rounded-lg" />
+            </div>
             <span className="font-bold text-[#f0f0f5]">Vid2Podcast</span>
           </Link>
           <div className="hidden md:flex items-center gap-6 ml-6">

@@ -99,22 +99,25 @@ body {
 @keyframes spin     { to { transform: rotate(360deg); } }
 @keyframes logo-spin-decel {
   0%   { transform: rotate(0deg); }
-  10%  { transform: rotate(180deg); }
-  20%  { transform: rotate(320deg); }
-  30%  { transform: rotate(440deg); }
-  40%  { transform: rotate(540deg); }
-  50%  { transform: rotate(620deg); }
-  60%  { transform: rotate(680deg); }
-  70%  { transform: rotate(720deg); }
-  78%  { transform: rotate(745deg); }
-  85%  { transform: rotate(760deg); }
-  91%  { transform: rotate(768deg); }
-  96%  { transform: rotate(718deg); }
-  98%  { transform: rotate(721deg); }
-  100% { transform: rotate(720deg); }
+  8%   { transform: rotate(200deg); }
+  16%  { transform: rotate(370deg); }
+  24%  { transform: rotate(520deg); }
+  32%  { transform: rotate(650deg); }
+  40%  { transform: rotate(760deg); }
+  48%  { transform: rotate(850deg); }
+  56%  { transform: rotate(920deg); }
+  64%  { transform: rotate(970deg); }
+  72%  { transform: rotate(1005deg); }
+  80%  { transform: rotate(1030deg); }
+  87%  { transform: rotate(1048deg); }
+  93%  { transform: rotate(1058deg); }
+  97%  { transform: rotate(1063deg); }
+  100% { transform: rotate(1080deg); }
 }
 .logo-spin-once {
-  animation: logo-spin-decel 2s linear forwards;
+  display: inline-block;
+  animation: logo-spin-decel 2.2s linear forwards;
+  transform-origin: center;
 }
 @keyframes shimmer  { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 @keyframes fadeIn   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
