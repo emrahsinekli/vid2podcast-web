@@ -29,11 +29,17 @@ interface PlaylistVideo {
   selected: boolean;
 }
 
+interface TranscriptSegment {
+  t: number;  // start time in seconds
+  text: string;
+}
+
 interface ConversionResult {
   videoId: string;
   title: string;
   author: string;
   transcript: string;
+  segments: TranscriptSegment[]; // real YouTube timestamps
 }
 
 // ─── Pro Wall Modal ──────────────────────────────────────────────────────────
@@ -97,66 +103,99 @@ function LoadingOrb({ msg }: { msg?: string }) {
   );
 }
 
+function fmtTime(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 // ─── Audio Player ────────────────────────────────────────────────────────────
 function AudioPlayer({
   transcript,
+  segments,
   isPro,
   langBcp47,
   onProWall,
-  onBoundary,
-  seekRef,
+  onSegmentChange,
+  seekToSegmentRef,
 }: {
   transcript: string;
+  segments: { t: number; text: string }[];
   isPro: boolean;
   langBcp47: string;
   onProWall: () => void;
-  onBoundary?: (charIndex: number) => void;
-  seekRef?: React.MutableRefObject<((charIndex: number) => void) | null>;
+  onSegmentChange?: (segIdx: number) => void;
+  seekToSegmentRef?: React.MutableRefObject<((segIdx: number) => void) | null>;
 }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [generating, setGenerating] = useState(false);
+  const [currentSeg, setCurrentSeg] = useState(-1);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const offsetRef = useRef(0); // char offset when seeking
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
 
   useEffect(() => {
     synthRef.current = window.speechSynthesis;
-    return () => {
-      synthRef.current?.cancel();
-    };
+    return () => { synthRef.current?.cancel(); };
   }, []);
 
-  const startFrom = (charOffset: number) => {
+  // Build char-offset → segment index map once
+  const segCharOffsets = useRef<number[]>([]);
+  useEffect(() => {
+    if (!segments.length) return;
+    const offsets: number[] = [];
+    let off = 0;
+    for (const seg of segments) {
+      offsets.push(off);
+      off += seg.text.length + 1; // +1 for space between segments
+    }
+    segCharOffsets.current = offsets;
+  }, [segments]);
+
+  const startFromSegIdx = (segIdx: number) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
-    offsetRef.current = charOffset;
     setGenerating(true);
+    // Build text from that segment onward (max 5000 chars)
+    const text = segments.length
+      ? segments.slice(segIdx).map((s) => s.text).join(" ").slice(0, 5000)
+      : transcript.slice(0, 5000);
+    const charBase = segCharOffsets.current[segIdx] ?? 0;
+    const totalChars = transcript.length || 1;
+
     setTimeout(() => {
-      const text = transcript.slice(charOffset, charOffset + 5000);
       const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = speed;
+      utter.rate = speedRef.current;
       if (langBcp47) utter.lang = langBcp47;
       utter.onstart = () => { setPlaying(true); setGenerating(false); };
-      utter.onend = () => { setPlaying(false); setProgress(100); onBoundary?.(transcript.length); };
+      utter.onend = () => { setPlaying(false); setProgress(100); };
       utter.onboundary = (e) => {
-        const absoluteChar = charOffset + e.charIndex;
-        const pct = Math.min(100, Math.round((absoluteChar / transcript.length) * 100));
-        setProgress(pct);
-        onBoundary?.(absoluteChar);
+        const absChar = charBase + e.charIndex;
+        setProgress(Math.min(100, Math.round((absChar / totalChars) * 100)));
+        // Find which segment this charIndex falls in
+        if (segments.length) {
+          const offsets = segCharOffsets.current;
+          let idx = segIdx;
+          for (let i = segIdx; i < offsets.length; i++) {
+            if (offsets[i] <= absChar) idx = i;
+            else break;
+          }
+          setCurrentSeg(idx);
+          onSegmentChange?.(idx);
+        }
       };
       utterRef.current = utter;
       synthRef.current!.speak(utter);
     }, 100);
   };
 
-  // Expose seek function via ref
+  // Expose seek-by-segment function
   useEffect(() => {
-    if (seekRef) seekRef.current = startFrom;
+    if (seekToSegmentRef) seekToSegmentRef.current = startFromSegIdx;
   });
-
-  const handleGenerate = () => startFrom(0);
 
   const handlePlayPause = () => {
     if (!synthRef.current) return;
@@ -167,34 +206,41 @@ function AudioPlayer({
       synthRef.current.resume();
       setPlaying(true);
     } else {
-      handleGenerate();
+      startFromSegIdx(0);
     }
-  };
-
-  const handleGenerateNeural = () => {
-    if (!isPro) { onProWall(); return; }
-    handleGenerate();
   };
 
   const speeds = [0.75, 1, 1.25, 1.5, 2];
 
   return (
     <div className="rounded-2xl border p-5" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`w-2 h-2 rounded-full ${playing ? "bg-[#22c55e] animate-pulse" : "bg-[#606070]"}`} />
         <span className="text-sm font-medium text-[#f0f0f5]">Audio Player</span>
+        {currentSeg >= 0 && segments[currentSeg] && (
+          <span className="ml-auto text-xs text-[#8b5cf6] font-mono">{fmtTime(segments[currentSeg].t)}</span>
+        )}
       </div>
 
-      {/* Progress bar */}
-      <div className="relative h-2 rounded-full mb-4 overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+      {/* Progress bar — clickable */}
+      <div
+        className="relative h-2 rounded-full mb-4 overflow-hidden cursor-pointer"
+        style={{ background: "rgba(255,255,255,0.08)" }}
+        onClick={(e) => {
+          if (!segments.length) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const pct = (e.clientX - rect.left) / rect.width;
+          const targetIdx = Math.floor(pct * segments.length);
+          startFromSegIdx(Math.max(0, Math.min(targetIdx, segments.length - 1)));
+        }}
+      >
         <div
-          className="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+          className="absolute inset-y-0 left-0 rounded-full transition-all duration-200"
           style={{ width: `${progress}%`, background: "linear-gradient(90deg, #8b5cf6, #a78bfa)" }}
         />
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Play/Pause */}
         <button
           onClick={handlePlayPause}
           disabled={generating}
@@ -217,15 +263,11 @@ function AudioPlayer({
           )}
         </button>
 
-        {/* Speed selector */}
         <div className="flex items-center gap-1">
           {speeds.map((s) => (
             <button
               key={s}
-              onClick={() => {
-                setSpeed(s);
-                if (utterRef.current) utterRef.current.rate = s;
-              }}
+              onClick={() => setSpeed(s)}
               className={`px-2 py-1 rounded-lg text-xs font-medium transition-all duration-150 ${speed === s ? "text-white" : "text-[#606070] hover:text-[#a0a0b0]"}`}
               style={speed === s ? { background: "rgba(139,92,246,0.3)", color: "#a78bfa" } : {}}
             >
@@ -236,14 +278,7 @@ function AudioPlayer({
 
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={handleGenerate}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#a0a0b0] border transition-all duration-150 hover:bg-white/5"
-            style={{ borderColor: "rgba(255,255,255,0.12)" }}
-          >
-            Browser TTS
-          </button>
-          <button
-            onClick={handleGenerateNeural}
+            onClick={() => { if (!isPro) { onProWall(); return; } startFromSegIdx(0); }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-90"
             style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}
           >
@@ -304,8 +339,8 @@ export default function ConverterPage() {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
   // Transcript sync
-  const [currentCharIdx, setCurrentCharIdx] = useState(-1);
-  const seekRef = useRef<((charIndex: number) => void) | null>(null);
+  const [activeSegIdx, setActiveSegIdx] = useState(-1);
+  const seekToSegmentRef = useRef<((segIdx: number) => void) | null>(null);
   const activeLineRef = useRef<HTMLDivElement>(null);
 
   // Misc
@@ -343,17 +378,22 @@ export default function ConverterPage() {
       const d = await res.json().catch(() => ({}));
       throw new Error((d as { error?: string }).error ?? `Server error ${res.status}`);
     }
-    const data = await res.json() as { title?: string; author?: string; transcript?: string };
+    const data = await res.json() as { title?: string; author?: string; transcript?: string; segments?: { t: number; text: string }[] };
     let transcript = data.transcript ?? "";
+    let segments = data.segments ?? [];
     if (language !== "original" && transcript) {
       const tRes = await fetch(`${BACKEND_URL}/api/translate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ text: transcript, target: language }),
       });
-      if (tRes.ok) { const td = await tRes.json() as { translated?: string }; transcript = td.translated || transcript; }
+      if (tRes.ok) {
+        const td = await tRes.json() as { translated?: string };
+        transcript = td.translated || transcript;
+        segments = []; // translated text has no timestamp alignment
+      }
     }
-    return { videoId, title: data.title ?? "YouTube Video", author: data.author ?? "", transcript };
+    return { videoId, title: data.title ?? "YouTube Video", author: data.author ?? "", transcript, segments };
   };
 
   // ── Playlist fetch ────────────────────────────────────────────────────────
@@ -497,6 +537,7 @@ export default function ConverterPage() {
 
       const data = await res.json();
       let transcript = data.transcript ?? "";
+      let segments: { t: number; text: string }[] = data.segments ?? [];
 
       // Translate if a non-original language is selected
       if (language !== "original" && transcript) {
@@ -513,6 +554,7 @@ export default function ConverterPage() {
           if (tRes.ok) {
             const tData = await tRes.json();
             transcript = tData.translated || transcript;
+            segments = []; // translated text loses timestamp alignment
           }
         } catch (_) { /* keep original on translate error */ }
       }
@@ -522,6 +564,7 @@ export default function ConverterPage() {
         title: data.title ?? "YouTube Video",
         author: data.author ?? "Unknown",
         transcript,
+        segments,
       };
       setResult(convResult);
       setTab("transcript");
@@ -906,15 +949,15 @@ export default function ConverterPage() {
           {/* Audio Player */}
           <AudioPlayer
             transcript={result.transcript}
+            segments={result.segments}
             isPro={isPro}
             langBcp47={selectedLang?.bcp47 ?? ""}
             onProWall={() => setShowProWall(true)}
-            onBoundary={(idx) => {
-              setCurrentCharIdx(idx);
-              // Auto-scroll to active line
+            onSegmentChange={(idx) => {
+              setActiveSegIdx(idx);
               setTimeout(() => activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
             }}
-            seekRef={seekRef}
+            seekToSegmentRef={seekToSegmentRef}
           />
 
           {/* Tabs */}
@@ -940,35 +983,37 @@ export default function ConverterPage() {
                   className="h-72 overflow-y-auto rounded-xl p-3 mb-4 scrollbar-thin space-y-0.5"
                   style={{ background: "#0a0a0f" }}
                 >
-                  {result.transcript
-                    ? (() => {
-                        // Build sentence list with char offsets
-                        const sentences: { text: string; start: number }[] = [];
-                        let offset = 0;
-                        for (const seg of result.transcript.split(/(?<=[.!?。]\s+|\n)/)) {
-                          const trimmed = seg.trimEnd();
-                          if (trimmed) sentences.push({ text: trimmed, start: offset });
-                          offset += seg.length;
-                        }
-                        return sentences.map((s, i) => {
-                          const nextStart = sentences[i + 1]?.start ?? result.transcript.length;
-                          const isActive = currentCharIdx >= s.start && currentCharIdx < nextStart;
-                          return (
-                            <div
-                              key={i}
-                              ref={isActive ? activeLineRef : undefined}
-                              onClick={() => seekRef.current?.(s.start)}
-                              className="px-2.5 py-1.5 rounded-lg text-sm leading-relaxed cursor-pointer select-none transition-all duration-200"
-                              style={isActive
-                                ? { background: "rgba(139,92,246,0.18)", color: "#e2d9ff", borderLeft: "2px solid #8b5cf6" }
-                                : { color: "#a0a0b0", borderLeft: "2px solid transparent" }}
+                  {result.segments.length > 0
+                    ? result.segments.map((seg, i) => {
+                        const isActive = i === activeSegIdx;
+                        return (
+                          <div
+                            key={i}
+                            ref={isActive ? activeLineRef : undefined}
+                            onClick={() => seekToSegmentRef.current?.(i)}
+                            className="flex gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer select-none transition-all duration-150 group"
+                            style={isActive
+                              ? { background: "rgba(139,92,246,0.18)", borderLeft: "2px solid #8b5cf6" }
+                              : { borderLeft: "2px solid transparent" }}
+                          >
+                            <span
+                              className="text-[10px] font-mono mt-0.5 flex-shrink-0 w-8 pt-[3px]"
+                              style={{ color: isActive ? "#8b5cf6" : "#606070" }}
                             >
-                              {s.text}
-                            </div>
-                          );
-                        });
-                      })()
-                    : <p className="text-sm text-[#606070] p-2">No transcript available.</p>
+                              {fmtTime(seg.t)}
+                            </span>
+                            <span
+                              className="text-sm leading-relaxed"
+                              style={{ color: isActive ? "#e2d9ff" : "#a0a0b0" }}
+                            >
+                              {seg.text}
+                            </span>
+                          </div>
+                        );
+                      })
+                    : result.transcript
+                      ? <p className="text-sm text-[#a0a0b0] p-2 leading-relaxed">{result.transcript}</p>
+                      : <p className="text-sm text-[#606070] p-2">No transcript available.</p>
                   }
                 </div>
                 <div className="flex gap-2">
