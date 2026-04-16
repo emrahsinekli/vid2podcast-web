@@ -655,16 +655,20 @@ export default function ConverterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Compute AI summary once per result (Gemini Nano → Transformers.js → extractive)
+  // AI summary via Groq (free, full transcript)
   useEffect(() => {
     if (!result) { setAiSummary(""); return; }
     setSummaryLoading(true);
-    // Pass isPro:true so summary doesn't count against the chat AI daily limit
-    freeAISummarize(result.transcript, { wordCount: isPro ? 500 : FREE_SUMMARY_WORDS, isPro: true })
-      .then(setAiSummary)
-      .catch(() => setAiSummary(""))
+    fetch(`${BACKEND_URL}/api/ai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
+      body: JSON.stringify({ type: "summary", transcript: result.transcript, wordCount: 300 }),
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((d) => setAiSummary(d.result ?? ""))
+      .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
       .finally(() => setSummaryLoading(false));
-  }, [result?.videoId, isPro]);
+  }, [result?.videoId]);
 
   const getToken = async () => {
     const supabase = createClient();
@@ -744,6 +748,7 @@ export default function ConverterPage() {
             video_title: convResult.title,
             title: convResult.title,
             language: language === "original" ? "original" : language,
+            transcript_text: convResult.transcript,
           });
         }
       } catch (e) {
@@ -884,6 +889,7 @@ export default function ConverterPage() {
           video_title: convResult.title,
           title: convResult.title,
           language: language === "original" ? "original" : language,
+          transcript_text: convResult.transcript,
         });
       }
     } catch (e: unknown) {
@@ -913,37 +919,21 @@ export default function ConverterPage() {
   const handleChat = async () => {
     if (!chatInput.trim() || !result) return;
 
-    if (!isPro && chatMessages.filter((m) => m.role === "user").length >= FREE_CHAT_LIMIT) {
-      setShowProWall(true);
-      return;
-    }
-
     const question = chatInput.trim();
     setChatInput("");
     setChatMessages((prev) => [...prev, { role: "user", text: question }]);
     setChatLoading(true);
 
     try {
-      let answer: string;
-      if (!isPro) {
-        // Free users: browser-side AI (Gemini Nano → Transformers.js → extractive)
-        answer = await freeAIAnswer(result.transcript, question, false);
-      } else {
-        // Pro users: backend API
-        const token = await getToken();
-        const res = await fetch(`${BACKEND_URL}/api/chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ question, transcript: result.transcript }),
-        });
-        if (!res.ok) throw new Error("Chat request failed");
-        const data = await res.json();
-        answer = data.answer ?? "I could not find an answer.";
-      }
-      setChatMessages((prev) => [...prev, { role: "assistant", text: answer }]);
+      // Groq — free for everyone, full transcript, no limit enforced
+      const res = await fetch(`${BACKEND_URL}/api/ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
+        body: JSON.stringify({ type: "chat", transcript: result.transcript, question }),
+      });
+      if (!res.ok) throw new Error("AI request failed");
+      const data = await res.json();
+      setChatMessages((prev) => [...prev, { role: "assistant", text: data.result ?? "I could not find an answer." }]);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Sorry, I encountered an error. Please try again.";
       setChatMessages((prev) => [...prev, { role: "assistant", text: msg }]);
@@ -960,11 +950,13 @@ export default function ConverterPage() {
     ? (result?.segments ?? [])
     : result?.transcript ? smartSplitText(result.transcript) : [];
 
-  // For "descriptive" type, show AI-generated summary; other types use extractive formatter
+  // Summary: AI (Groq) for descriptive, extractive for others
+  // When summaryType changes to a non-descriptive type, fetch from Groq too
+  const groqTypeMap: Record<string, string> = { keypoints: "keypoints", tldr: "tldr" };
   const summaryText = result
     ? summaryType === "descriptive" && aiSummary
       ? aiSummary
-      : summarize(result.transcript, { type: summaryType, wordCount: isPro ? 500 : FREE_SUMMARY_WORDS })
+      : summarize(result.transcript, { type: summaryType, wordCount: 500 })
     : "";
 
   const summaryTypes: { value: SummaryType; label: string }[] = [
