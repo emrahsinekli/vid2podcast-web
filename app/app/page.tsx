@@ -268,14 +268,25 @@ function renderWithSpeakers(text: string): React.ReactNode {
   return parts.length > 1 ? <>{parts}</> : text;
 }
 
-function splitTextForTTS(text: string, maxChars = 4500): string[] {
+const _enc = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+function byteLen(s: string) { return _enc ? _enc.encode(s).length : s.length; }
+
+function splitTextForTTS(text: string, maxBytes = 4500): string[] {
   const chunks: string[] = [];
   let remaining = text.replace(/\s+/g, " ").trim();
-  while (remaining.length > maxChars) {
-    let cut = remaining.lastIndexOf(". ", maxChars);
-    if (cut < maxChars / 2) cut = remaining.lastIndexOf(", ", maxChars);
-    if (cut < maxChars / 2) cut = remaining.lastIndexOf(" ", maxChars);
-    if (cut <= 0) cut = maxChars;
+  while (byteLen(remaining) > maxBytes) {
+    // Binary search for safe cut point within byte limit
+    let lo = 0, hi = remaining.length;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (byteLen(remaining.slice(0, mid)) <= maxBytes) lo = mid; else hi = mid;
+    }
+    // Try to cut at sentence/word boundary
+    let cut = remaining.lastIndexOf(". ", lo);
+    if (cut < lo / 2) cut = remaining.lastIndexOf("، ", lo); // Arabic comma
+    if (cut < lo / 2) cut = remaining.lastIndexOf(", ", lo);
+    if (cut < lo / 2) cut = remaining.lastIndexOf(" ", lo);
+    if (cut <= 0) cut = lo;
     chunks.push(remaining.slice(0, cut + 1).trim());
     remaining = remaining.slice(cut + 1).trim();
   }
