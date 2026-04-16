@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useUser } from "@/hooks/useUser";
-import { POLAR_BUY_URL } from "@/lib/constants";
+import { POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
 
 // ─── Sign In Modal ─────────────────────────────────────────────────────────────
 function SignInModal({ onClose }: { onClose: () => void }) {
@@ -217,10 +217,10 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 
 // ─── Pricing Card ───────────────────────────────────────────────────────────────
 function PricingCard({
-  name, price, period, desc, features, cta, href, highlighted, badge,
+  name, price, period, desc, features, cta, href, highlighted, badge, trialBadge,
 }: {
   name: string; price: string; period?: string; desc: string; features: string[];
-  cta: string; href: string; highlighted?: boolean; badge?: string;
+  cta: string; href: string; highlighted?: boolean; badge?: string; trialBadge?: string;
 }) {
   return (
     <div
@@ -244,6 +244,14 @@ function PricingCard({
           {period && <span className="text-[#a0a0b0] mb-1.5 text-sm">{period}</span>}
         </div>
         <p className="text-sm text-[#a0a0b0]">{desc}</p>
+        {trialBadge && (
+          <div className="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)" }}>
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {trialBadge}
+          </div>
+        )}
       </div>
       <ul className="space-y-3 mb-8 flex-1">
         {features.map((f) => (
@@ -255,15 +263,20 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      <Link
+      <a
         href={href}
+        target="_blank"
+        rel="noopener noreferrer"
         className={`block w-full text-center py-3 rounded-xl font-semibold transition-all duration-200 ${
           highlighted ? "text-white hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/25" : "text-[#f0f0f5] hover:bg-white/5"
         }`}
         style={highlighted ? { background: "#8b5cf6" } : { border: "1px solid rgba(255,255,255,0.12)" }}
       >
         {cta}
-      </Link>
+      </a>
+      {trialBadge && (
+        <p className="text-center text-[10px] text-[#606070] mt-2">No credit card required for trial</p>
+      )}
     </div>
   );
 }
@@ -506,8 +519,9 @@ function LandingInner() {
               period="/mo"
               desc="Full access, billed monthly"
               features={proFeatures}
-              cta="Start Monthly"
-              href={POLAR_BUY_URL}
+              cta="Try Free 3 Days"
+              trialBadge="3-day free trial"
+              href={POLAR_MONTHLY_URL}
             />
             {/* Yearly — highlighted */}
             <PricingCard
@@ -516,8 +530,9 @@ function LandingInner() {
               period="/yr"
               desc="Full access — save 33% vs monthly"
               features={[...proFeatures, "Save $39.89 vs monthly"]}
-              cta="Start Yearly"
-              href={POLAR_BUY_URL}
+              cta="Try Free 3 Days"
+              trialBadge="3-day free trial"
+              href={POLAR_YEARLY_URL}
               highlighted
               badge="Best Value"
             />
@@ -529,7 +544,7 @@ function LandingInner() {
               desc="Pay once, use forever — no recurring fees"
               features={[...proFeatures, "No recurring charges ever"]}
               cta="Get Lifetime Access"
-              href={POLAR_BUY_URL}
+              href={POLAR_LIFETIME_URL}
             />
           </div>
         </div>

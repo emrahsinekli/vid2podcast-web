@@ -36,5 +36,18 @@ export const LANGUAGES = [
 export const FREE_LIMIT = 1;
 export const FREE_CHAT_LIMIT = 2;
 export const FREE_SUMMARY_WORDS = 80;
-export const POLAR_BUY_URL = "https://buy.polar.sh/polar_cl_PbOP9j9S1vNFdBCbtbK4MlWvPKjqrw6kIr8E62Wy1vp";
+const SITE_URL = "https://vid2podcast.com";
+
+// Single checkout page — shows all 3 plans (Monthly / Yearly / Lifetime)
+const POLAR_BASE = "https://buy.polar.sh/polar_cl_PbOP9j9S1vNFdBCbtbK4MlWvPKjqrw6kIr8E62Wy1vp";
+
+// Add success_url so Polar redirects back after payment
+export const POLAR_BUY_URL = `${POLAR_BASE}?success_url=${encodeURIComponent(`${SITE_URL}/app?upgraded=true`)}`;
+
+// Helper — builds checkout URL pre-selecting a plan (Polar supports ?product_price_id= for deep linking)
+// These IDs come from Polar Dashboard → Products → each price's ID
+// Fill in when you have them, otherwise falls back to main checkout
+export const POLAR_MONTHLY_URL = POLAR_BUY_URL;   // TODO: replace with monthly product price URL
+export const POLAR_YEARLY_URL  = POLAR_BUY_URL;   // TODO: replace with yearly product price URL
+export const POLAR_LIFETIME_URL = POLAR_BUY_URL;  // TODO: replace with lifetime product price URL
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vid2podcast-backend.vercel.app";

@@ -7,6 +7,8 @@ export interface UserProfile {
   id: string;
   email: string;
   plan: "free" | "pro";
+  isTrial?: boolean;
+  trialEndsAt?: string | null;
   settings: {
     defaultLanguage: string;
     voiceGender: "female" | "male";
@@ -56,12 +58,16 @@ export function useUser() {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vid2podcast-backend.vercel.app";
         const r = await fetch(`${backendUrl}/api/check?email=${encodeURIComponent(email.toLowerCase())}`);
         if (r.ok) {
-          const { plan: realPlan } = await r.json() as { plan: string };
+          const resp = await r.json() as { plan: string; isTrial?: boolean; trialEndsAt?: string | null };
+          const realPlan = resp.plan;
           const currentPlan = data?.plan ?? "free";
-          if (realPlan && realPlan !== currentPlan) {
-            // Note: plan update done server-side via webhook (service key bypasses RLS)
-            // Here we just update local state so UI reflects correct plan immediately
-            setProfile((prev) => prev ? { ...prev, plan: realPlan as "free" | "pro" } : prev);
+          if (realPlan && (realPlan !== currentPlan || resp.isTrial)) {
+            setProfile((prev) => prev ? {
+              ...prev,
+              plan: realPlan as "free" | "pro",
+              isTrial: resp.isTrial ?? false,
+              trialEndsAt: resp.trialEndsAt ?? null,
+            } : prev);
           }
         }
       } catch (_) { /* non-critical — fall back to stored plan */ }
@@ -85,5 +91,5 @@ export function useUser() {
     window.location.href = "/";
   }
 
-  return { user, profile, loading, isPro, signIn, signOut };
+  return { user, profile, setProfile, loading, isPro, signIn, signOut };
 }

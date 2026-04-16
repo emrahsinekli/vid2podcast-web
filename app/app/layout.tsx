@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/supabase/server";
+import { UpgradeHandler, TrialBanner } from "@/components/UpgradeHandler";
 
 async function getUser() {
   const supabase = await createClient();
@@ -185,11 +187,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Bottom section */}
         <div className="px-3 py-4 border-t space-y-3" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           {/* Upgrade CTA for free users */}
+          {/* Trial countdown for trial users */}
+          <Suspense>
+            <TrialBanner />
+          </Suspense>
+
           {!isPro && (
-            <a
-              href="https://buy.polar.sh/polar_cl_PbOP9j9S1vNFdBCbtbK4MlWvPKjqrw6kIr8E62Wy1vp"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/app/upgrade"
               className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl text-sm font-bold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/30"
               style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)" }}
             >
@@ -197,7 +202,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               Upgrade to Pro
-            </a>
+            </Link>
           )}
 
           {/* Plan badge */}
@@ -278,6 +283,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       {/* ── Mobile Bottom Nav ── */}
       <MobileBottomNav />
+
+      {/* Upgrade success handler + toast */}
+      <Suspense>
+        <UpgradeHandler />
+      </Suspense>
     </div>
   );
 }
