@@ -59,7 +59,8 @@ export function useUser() {
           const { plan: realPlan } = await r.json() as { plan: string };
           const currentPlan = data?.plan ?? "free";
           if (realPlan && realPlan !== currentPlan) {
-            await supabase.from("users").update({ plan: realPlan }).eq("id", userId);
+            // Note: plan update done server-side via webhook (service key bypasses RLS)
+            // Here we just update local state so UI reflects correct plan immediately
             setProfile((prev) => prev ? { ...prev, plan: realPlan as "free" | "pro" } : prev);
           }
         }
