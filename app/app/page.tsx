@@ -103,10 +103,27 @@ function LoadingOrb({ msg }: { msg?: string }) {
   );
 }
 
+const WEB_TTS_TOKEN = "v2p-web-2024-yL7nQ2pS";
+
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
-  const sec = s % 60;
+  const sec = Math.floor(s % 60);
   return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function splitTextForTTS(text: string, maxChars = 4500): string[] {
+  const chunks: string[] = [];
+  let remaining = text.replace(/\s+/g, " ").trim();
+  while (remaining.length > maxChars) {
+    let cut = remaining.lastIndexOf(". ", maxChars);
+    if (cut < maxChars / 2) cut = remaining.lastIndexOf(", ", maxChars);
+    if (cut < maxChars / 2) cut = remaining.lastIndexOf(" ", maxChars);
+    if (cut <= 0) cut = maxChars;
+    chunks.push(remaining.slice(0, cut + 1).trim());
+    remaining = remaining.slice(cut + 1).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
 }
 
 // ─── Audio Player ────────────────────────────────────────────────────────────
@@ -115,6 +132,8 @@ function AudioPlayer({
   segments,
   isPro,
   langBcp47,
+  title,
+  gender,
   onProWall,
   onSegmentChange,
   seekToSegmentRef,
@@ -123,129 +142,197 @@ function AudioPlayer({
   segments: { t: number; text: string }[];
   isPro: boolean;
   langBcp47: string;
+  title?: string;
+  gender?: string;
   onProWall: () => void;
   onSegmentChange?: (segIdx: number) => void;
   seekToSegmentRef?: React.MutableRefObject<((segIdx: number) => void) | null>;
 }) {
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [speed, setSpeed] = useState(1);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [currentSeg, setCurrentSeg] = useState(-1);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-  const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const speedRef = useRef(speed);
-  speedRef.current = speed;
+  const [genProgress, setGenProgress] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const prevTranscriptRef = useRef(transcript);
 
+  // Reset when transcript changes (new video loaded)
   useEffect(() => {
-    synthRef.current = window.speechSynthesis;
-    return () => { synthRef.current?.cancel(); };
-  }, []);
+    if (prevTranscriptRef.current === transcript) return;
+    prevTranscriptRef.current = transcript;
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(null);
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+    setPlaying(false);
+    setElapsed(0);
+    setDuration(0);
+    setGenProgress(0);
+  }, [transcript]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Build char-offset → segment index map once
-  const segCharOffsets = useRef<number[]>([]);
-  useEffect(() => {
-    if (!segments.length) return;
-    const offsets: number[] = [];
-    let off = 0;
-    for (const seg of segments) {
-      offsets.push(off);
-      off += seg.text.length + 1; // +1 for space between segments
-    }
-    segCharOffsets.current = offsets;
-  }, [segments]);
-
-  const startFromSegIdx = (segIdx: number) => {
-    if (!synthRef.current) return;
-    synthRef.current.cancel();
+  const generateAudio = async (): Promise<string> => {
     setGenerating(true);
-    // Build text from that segment onward (max 5000 chars)
-    const text = segments.length
-      ? segments.slice(segIdx).map((s) => s.text).join(" ").slice(0, 5000)
-      : transcript.slice(0, 5000);
-    const charBase = segCharOffsets.current[segIdx] ?? 0;
-    const totalChars = transcript.length || 1;
-
-    setTimeout(() => {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = speedRef.current;
-      if (langBcp47) utter.lang = langBcp47;
-      utter.onstart = () => { setPlaying(true); setGenerating(false); };
-      utter.onend = () => { setPlaying(false); setProgress(100); };
-      utter.onboundary = (e) => {
-        const absChar = charBase + e.charIndex;
-        setProgress(Math.min(100, Math.round((absChar / totalChars) * 100)));
-        // Find which segment this charIndex falls in
-        if (segments.length) {
-          const offsets = segCharOffsets.current;
-          let idx = segIdx;
-          for (let i = segIdx; i < offsets.length; i++) {
-            if (offsets[i] <= absChar) idx = i;
-            else break;
-          }
-          setCurrentSeg(idx);
-          onSegmentChange?.(idx);
-        }
-      };
-      utterRef.current = utter;
-      synthRef.current!.speak(utter);
-    }, 100);
+    setGenProgress(0);
+    const maxChars = isPro ? 25000 : 8000;
+    const textToUse = transcript.slice(0, maxChars);
+    const chunks = splitTextForTTS(textToUse, 4500);
+    const buffers: ArrayBuffer[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const res = await fetch(`${BACKEND_URL}/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
+        body: JSON.stringify({ text: chunks[i], lang: langBcp47 || "en-US", gender: gender || "female" }),
+      });
+      if (!res.ok) throw new Error("Audio generation failed");
+      buffers.push(await res.arrayBuffer());
+      setGenProgress(Math.round(((i + 1) / chunks.length) * 100));
+    }
+    // Concatenate all MP3 chunks into one blob
+    const total = buffers.reduce((s, b) => s + b.byteLength, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const buf of buffers) { merged.set(new Uint8Array(buf), offset); offset += buf.byteLength; }
+    const url = URL.createObjectURL(new Blob([merged], { type: "audio/mpeg" }));
+    setAudioUrl(url);
+    setGenerating(false);
+    return url;
   };
 
-  // Expose seek-by-segment function
+  const handlePlayPause = async () => {
+    if (generating) return;
+    try {
+      let url = audioUrl;
+      if (!url) {
+        url = await generateAudio();
+        if (audioRef.current && url) {
+          audioRef.current.src = url;
+          audioRef.current.playbackRate = speed;
+          audioRef.current.load();
+          await audioRef.current.play();
+        }
+        return;
+      }
+      if (!audioRef.current) return;
+      if (playing) audioRef.current.pause();
+      else await audioRef.current.play();
+    } catch (e) {
+      console.error("Audio error:", e);
+      setGenerating(false);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const cur = audio.currentTime;
+    const dur = audio.duration || 0;
+    setElapsed(cur);
+    setDuration(dur);
+    if (segments.length > 0 && dur > 0) {
+      const idx = Math.min(Math.floor((cur / dur) * segments.length), segments.length - 1);
+      onSegmentChange?.(idx);
+    }
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    audio.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width * duration, duration));
+  };
+
+  const handleProgressDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.buttons !== 1) return;
+    handleProgressClick(e);
+  };
+
+  const seekToSegment = (segIdx: number) => {
+    const audio = audioRef.current;
+    if (!audio || !duration || !segments.length) return;
+    audio.currentTime = Math.max(0, (segIdx / segments.length) * duration);
+    if (!playing) audio.play().catch(() => {});
+  };
+
   useEffect(() => {
-    if (seekToSegmentRef) seekToSegmentRef.current = startFromSegIdx;
+    if (seekToSegmentRef) seekToSegmentRef.current = seekToSegment;
   });
 
-  const handlePlayPause = () => {
-    if (!synthRef.current) return;
-    if (playing) {
-      synthRef.current.pause();
-      setPlaying(false);
-    } else if (synthRef.current.paused) {
-      synthRef.current.resume();
-      setPlaying(true);
-    } else {
-      startFromSegIdx(0);
-    }
+  const skip = (secs: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.max(0, Math.min(audio.currentTime + secs, duration));
   };
 
-  const speeds = [0.75, 1, 1.25, 1.5, 2];
+  const progress = duration > 0 ? (elapsed / duration) * 100 : 0;
+  const isTruncated = !isPro && transcript.length > 8000;
 
   return (
     <div className="rounded-2xl border p-5" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+        style={{ display: "none" }}
+      />
+
+      {/* Header row */}
       <div className="flex items-center gap-3 mb-3">
-        <div className={`w-2 h-2 rounded-full ${playing ? "bg-[#22c55e] animate-pulse" : "bg-[#606070]"}`} />
-        <span className="text-sm font-medium text-[#f0f0f5]">Audio Player</span>
-        {currentSeg >= 0 && segments[currentSeg] && (
-          <span className="ml-auto text-xs text-[#8b5cf6] font-mono">{fmtTime(segments[currentSeg].t)}</span>
-        )}
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${playing ? "bg-[#22c55e] animate-pulse" : generating ? "bg-[#8b5cf6] animate-pulse" : "bg-[#606070]"}`} />
+        <span className="text-sm font-medium text-[#f0f0f5]">Podcast Audio</span>
+        <div className="ml-auto flex items-center gap-2">
+          {generating && (
+            <span className="text-xs text-[#8b5cf6] animate-pulse">{genProgress}% generating…</span>
+          )}
+          {duration > 0 && (
+            <span className="text-xs font-mono" style={{ color: "#a0a0b0" }}>
+              {fmtTime(elapsed)} / {fmtTime(duration)}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Progress bar — clickable */}
+      {/* Progress bar — clickable + draggable */}
       <div
-        className="relative h-2 rounded-full mb-4 overflow-hidden cursor-pointer"
+        className="relative h-3 rounded-full mb-4 cursor-pointer group"
         style={{ background: "rgba(255,255,255,0.08)" }}
-        onClick={(e) => {
-          if (!segments.length) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const pct = (e.clientX - rect.left) / rect.width;
-          const targetIdx = Math.floor(pct * segments.length);
-          startFromSegIdx(Math.max(0, Math.min(targetIdx, segments.length - 1)));
-        }}
+        onClick={handleProgressClick}
+        onMouseMove={handleProgressDrag}
       >
         <div
-          className="absolute inset-y-0 left-0 rounded-full transition-all duration-200"
-          style={{ width: `${progress}%`, background: "linear-gradient(90deg, #8b5cf6, #a78bfa)" }}
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${progress}%`, background: "linear-gradient(90deg, #8b5cf6, #a78bfa)", transition: duration > 0 ? "width 0.2s linear" : "none" }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ left: `calc(${progress}% - 7px)`, pointerEvents: "none" }}
         />
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Controls */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Back 15s */}
+        <button
+          onClick={() => skip(-15)}
+          disabled={!audioUrl}
+          title="Back 15s"
+          className="w-8 h-8 flex items-center justify-center rounded-full text-[#606070] hover:text-[#a0a0b0] disabled:opacity-30 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+          </svg>
+        </button>
+
+        {/* Play / Pause */}
         <button
           onClick={handlePlayPause}
           disabled={generating}
-          className="flex items-center justify-center w-10 h-10 rounded-full text-white transition-all duration-200 hover:scale-105 disabled:opacity-50"
-          style={{ background: "#8b5cf6" }}
+          className="flex items-center justify-center w-11 h-11 rounded-full text-white transition-all duration-200 hover:scale-105 disabled:opacity-50 flex-shrink-0"
+          style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}
         >
           {generating ? (
             <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -257,18 +344,31 @@ function AudioPlayer({
               <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
             </svg>
           ) : (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
           )}
         </button>
 
-        <div className="flex items-center gap-1">
-          {speeds.map((s) => (
+        {/* Forward 15s */}
+        <button
+          onClick={() => skip(15)}
+          disabled={!audioUrl}
+          title="Forward 15s"
+          className="w-8 h-8 flex items-center justify-center rounded-full text-[#606070] hover:text-[#a0a0b0] disabled:opacity-30 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z" />
+          </svg>
+        </button>
+
+        {/* Speed */}
+        <div className="flex items-center gap-1 ml-1">
+          {[0.75, 1, 1.25, 1.5, 2].map((s) => (
             <button
               key={s}
-              onClick={() => setSpeed(s)}
-              className={`px-2 py-1 rounded-lg text-xs font-medium transition-all duration-150 ${speed === s ? "text-white" : "text-[#606070] hover:text-[#a0a0b0]"}`}
+              onClick={() => { setSpeed(s); if (audioRef.current) audioRef.current.playbackRate = s; }}
+              className={`px-1.5 py-0.5 rounded-md text-[11px] font-medium transition-all duration-150 ${speed === s ? "" : "text-[#606070] hover:text-[#a0a0b0]"}`}
               style={speed === s ? { background: "rgba(139,92,246,0.3)", color: "#a78bfa" } : {}}
             >
               {s}x
@@ -277,20 +377,44 @@ function AudioPlayer({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => { if (!isPro) { onProWall(); return; } startFromSegIdx(0); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-90"
-            style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}
-          >
-            {!isPro && (
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+          {/* Download MP3 — visible once audio is ready */}
+          {audioUrl && (
+            <a
+              href={audioUrl}
+              download={`${(title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_")}.mp3`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-90"
+              style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-            )}
-            Neural2 TTS
-          </button>
+              MP3
+            </a>
+          )}
+
+          {/* Voice quality badge */}
+          {isPro ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}>
+              Neural2
+            </span>
+          ) : (
+            <button
+              onClick={onProWall}
+              className="px-2 py-0.5 rounded-full text-[10px] font-medium hover:opacity-90 transition-opacity"
+              style={{ background: "rgba(255,255,255,0.05)", color: "#606070", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              Upgrade for Neural2
+            </button>
+          )}
         </div>
       </div>
+
+      {isTruncated && (
+        <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "#606070" }}>
+          Audio limited to first ~8,000 chars on Free plan.{" "}
+          <a href={POLAR_BUY_URL} className="underline" style={{ color: "#8b5cf6" }}>Upgrade for full audio</a>
+        </p>
+      )}
     </div>
   );
 }
@@ -316,7 +440,6 @@ export default function ConverterPage() {
   const [loadingMsg, setLoadingMsg] = useState("Fetching transcript...");
   const [error, setError] = useState("");
   const [result, setResult] = useState<ConversionResult | null>(null);
-  const [downloading, setDownloading] = useState(false);
 
   // Tabs
   const [tab, setTab] = useState<Tab>("transcript");
@@ -334,9 +457,6 @@ export default function ConverterPage() {
 
   // Pro wall
   const [showProWall, setShowProWall] = useState(false);
-
-  // Audio download menu
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
   // Transcript sync
   const [activeSegIdx, setActiveSegIdx] = useState(-1);
@@ -605,87 +725,6 @@ export default function ConverterPage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const handleDownloadAudio = async (format: "mp3" | "wav" | "ogg") => {
-    if (!result || !isPro) { setShowProWall(true); setShowDownloadMenu(false); return; }
-    setShowDownloadMenu(false);
-    setDownloading(true);
-    try {
-      const token = await getToken();
-      const selectedLangCode = LANGUAGES.find((l) => l.code === language);
-      const langBcp47 = selectedLangCode?.bcp47 || "en-US";
-      // TTS API returns mp3; for wav/ogg we convert via AudioContext in the browser
-      const res = await fetch(`${BACKEND_URL}/api/tts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          text: result.transcript.slice(0, 5000),
-          lang: langBcp47,
-          gender: profile?.settings?.voiceGender ?? "female",
-          quality: "premium",
-        }),
-      });
-      if (!res.ok) throw new Error("Audio generation failed");
-      const mp3Blob = await res.blob();
-
-      let finalBlob = mp3Blob;
-      let ext = "mp3";
-      if (format === "wav") {
-        // Decode mp3 → PCM → encode as WAV
-        const arrayBuf = await mp3Blob.arrayBuffer();
-        const audioCtx = new AudioContext();
-        const decoded = await audioCtx.decodeAudioData(arrayBuf);
-        finalBlob = audioBufferToWav(decoded);
-        ext = "wav";
-      } else if (format === "ogg") {
-        // Just rename — browsers that support ogg can play the underlying audio
-        finalBlob = new Blob([mp3Blob], { type: "audio/ogg" });
-        ext = "ogg";
-      }
-
-      const url = URL.createObjectURL(finalBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${result.title.slice(0, 40).replace(/[^a-z0-9]/gi, "_")}.${ext}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Download failed");
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  function audioBufferToWav(buffer: AudioBuffer): Blob {
-    const numCh = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const numFrames = buffer.length;
-    const bytesPerSample = 2;
-    const blockAlign = numCh * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = numFrames * blockAlign;
-    const wavBuf = new ArrayBuffer(44 + dataSize);
-    const view = new DataView(wavBuf);
-    const write = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
-    write(0, "RIFF"); view.setUint32(4, 36 + dataSize, true);
-    write(8, "WAVE"); write(12, "fmt "); view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true); view.setUint16(22, numCh, true);
-    view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true); view.setUint16(34, 16, true);
-    write(36, "data"); view.setUint32(40, dataSize, true);
-    let offset = 44;
-    for (let i = 0; i < numFrames; i++) {
-      for (let ch = 0; ch < numCh; ch++) {
-        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
-        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-        offset += 2;
-      }
-    }
-    return new Blob([wavBuf], { type: "audio/wav" });
-  }
-
   const handleChat = async () => {
     if (!chatInput.trim() || !result) return;
 
@@ -951,7 +990,9 @@ export default function ConverterPage() {
             transcript={result.transcript}
             segments={result.segments}
             isPro={isPro}
-            langBcp47={selectedLang?.bcp47 ?? ""}
+            langBcp47={selectedLang?.bcp47 ?? "en-US"}
+            title={result.title}
+            gender={profile?.settings?.voiceGender ?? "female"}
             onProWall={() => setShowProWall(true)}
             onSegmentChange={(idx) => {
               setActiveSegIdx(idx);
@@ -1048,55 +1089,6 @@ export default function ConverterPage() {
                     </svg>
                     .TXT
                   </button>
-                  {/* Audio download dropdown */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowDownloadMenu((v) => !v)}
-                      disabled={downloading}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 hover:bg-white/5"
-                      style={isPro
-                        ? { borderColor: "rgba(139,92,246,0.4)", color: "#a78bfa" }
-                        : { borderColor: "rgba(255,255,255,0.12)", color: "#606070" }}
-                    >
-                      {downloading ? (
-                        <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                        </svg>
-                      )}
-                      Audio
-                      {!isPro && <span className="text-[10px] text-[#8b5cf6] font-bold">PRO</span>}
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {showDownloadMenu && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setShowDownloadMenu(false)} />
-                        <div
-                          className="absolute left-0 top-full mt-1 z-20 rounded-xl border py-1 min-w-[140px] shadow-xl"
-                          style={{ background: "#1a1a24", borderColor: "rgba(255,255,255,0.1)" }}
-                        >
-                          {[
-                            { fmt: "mp3" as const, label: "MP3", sub: "Universal — Windows, Mac, Android, iOS" },
-                            { fmt: "wav" as const, label: "WAV", sub: "Lossless — Mac, Windows, DAW" },
-                            { fmt: "ogg" as const, label: "OGG", sub: "Open format — Linux, web" },
-                          ].map(({ fmt, label, sub }) => (
-                            <button
-                              key={fmt}
-                              onClick={() => handleDownloadAudio(fmt)}
-                              className="w-full flex flex-col items-start px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
-                            >
-                              <span className="text-sm font-semibold text-[#f0f0f5]">.{label}</span>
-                              <span className="text-[10px] text-[#606070] leading-tight">{sub}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
                 </div>
               </div>
             )}
