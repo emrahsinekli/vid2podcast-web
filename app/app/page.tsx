@@ -111,6 +111,68 @@ function fmtTime(s: number) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+// Exactly like extension's smartSplitText: speaker-split first, then 30-word chunks
+function smartSplitText(text: string): TranscriptSegment[] {
+  const totalWords = text.split(/\s+/).length;
+  const segments: TranscriptSegment[] = [];
+  const speakerRegex = /([A-Z][A-Za-z\u00C0-\u017E]*(?:\s[A-Z][A-Za-z\u00C0-\u017E]*)*):\s/g;
+  const speakerPositions: { idx: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = speakerRegex.exec(text)) !== null) speakerPositions.push({ idx: m.index });
+
+  if (speakerPositions.length >= 2) {
+    if (speakerPositions[0].idx > 0) {
+      const pre = text.slice(0, speakerPositions[0].idx).trim();
+      if (pre) segments.push({ t: 0, text: pre });
+    }
+    for (let i = 0; i < speakerPositions.length; i++) {
+      const start = speakerPositions[i].idx;
+      const end = i + 1 < speakerPositions.length ? speakerPositions[i + 1].idx : text.length;
+      const chunk = text.slice(start, end).trim();
+      if (!chunk) continue;
+      const wordsBefore = text.slice(0, start).split(/\s+/).length;
+      const sec = Math.floor((wordsBefore / totalWords) * (totalWords / 2.5));
+      segments.push({ t: sec, text: chunk });
+    }
+    return segments;
+  }
+
+  // No speakers → 30-word chunks with proportional time estimate
+  const words = text.split(/\s+/);
+  let i = 0;
+  while (i < words.length) {
+    let end = Math.min(i + 30, words.length);
+    if (end < words.length) {
+      for (let j = end; j > i + 18; j--) {
+        if (/[.!?]$/.test(words[j - 1])) { end = j; break; }
+      }
+    }
+    const sec = Math.floor((i / totalWords) * (totalWords / 2.5));
+    segments.push({ t: sec, text: words.slice(i, end).join(" ") });
+    i = end;
+  }
+  return segments;
+}
+
+// Highlight speaker names ("Chris Anderson:", "CA:") with distinct colors
+const SPEAKER_COLORS = ["#818cf8", "#f472b6", "#34d399", "#fbbf24", "#fb923c", "#a78bfa", "#22d3ee", "#f87171"];
+function renderWithSpeakers(text: string): React.ReactNode {
+  const colorMap = new Map<string, string>();
+  let ci = 0;
+  const parts: React.ReactNode[] = [];
+  const re = /([A-Z][A-Za-z\u00C0-\u017E]*(?:\s[A-Z][A-Za-z\u00C0-\u017E]*)*):\s/g;
+  let last = 0, match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    const name = match[1];
+    if (!colorMap.has(name)) { colorMap.set(name, SPEAKER_COLORS[ci % SPEAKER_COLORS.length]); ci++; }
+    parts.push(<span key={match.index} className="font-semibold" style={{ color: colorMap.get(name) }}>{name}:{" "}</span>);
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length > 1 ? <>{parts}</> : text;
+}
+
 function splitTextForTTS(text: string, maxChars = 4500): string[] {
   const chunks: string[] = [];
   let remaining = text.replace(/\s+/g, " ").trim();
@@ -130,6 +192,7 @@ function splitTextForTTS(text: string, maxChars = 4500): string[] {
 function AudioPlayer({
   transcript,
   segments,
+  realTimestamps,
   isPro,
   langBcp47,
   title,
@@ -140,6 +203,7 @@ function AudioPlayer({
 }: {
   transcript: string;
   segments: { t: number; text: string }[];
+  realTimestamps: boolean;  // true = real YouTube timestamps, false = smartSplit estimates
   isPro: boolean;
   langBcp47: string;
   title?: string;
@@ -230,8 +294,18 @@ function AudioPlayer({
     setElapsed(cur);
     setDuration(dur);
     if (segments.length > 0 && dur > 0) {
-      const idx = Math.min(Math.floor((cur / dur) * segments.length), segments.length - 1);
-      onSegmentChange?.(idx);
+      let active = 0;
+      if (realTimestamps) {
+        // Extension approach: find last segment where seg.t <= currentTime
+        for (let i = 0; i < segments.length; i++) {
+          if (segments[i].t <= cur) active = i;
+          else break;
+        }
+      } else {
+        // Smart-split estimated timestamps: proportional
+        active = Math.min(Math.floor((cur / dur) * segments.length), segments.length - 1);
+      }
+      onSegmentChange?.(active);
     }
   };
 
@@ -249,8 +323,14 @@ function AudioPlayer({
 
   const seekToSegment = (segIdx: number) => {
     const audio = audioRef.current;
-    if (!audio || !duration || !segments.length) return;
-    audio.currentTime = Math.max(0, (segIdx / segments.length) * duration);
+    if (!audio || !segments.length) return;
+    if (realTimestamps) {
+      // Extension approach: seek to real YouTube timestamp
+      audio.currentTime = Math.min(segments[segIdx]?.t ?? 0, (duration || 9999) - 0.5);
+    } else {
+      // Estimated timestamps: proportional
+      audio.currentTime = duration > 0 ? (segIdx / segments.length) * duration : 0;
+    }
     if (!playing) audio.play().catch(() => {});
   };
 
@@ -415,6 +495,92 @@ function AudioPlayer({
           <a href={POLAR_BUY_URL} className="underline" style={{ color: "#8b5cf6" }}>Upgrade for full audio</a>
         </p>
       )}
+    </div>
+  );
+}
+
+// ─── Transcript Segment Row ───────────────────────────────────────────────────
+function TranscriptSegmentRow({
+  seg, idx, isActive, activeRef, onSeek,
+}: {
+  seg: TranscriptSegment;
+  idx: number;
+  isActive: boolean;
+  activeRef?: React.RefObject<HTMLDivElement | null>;
+  onSeek: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [segCopied, setSegCopied] = useState(false);
+  const PREVIEW_LEN = 200;
+  const isTruncated = seg.text.length > PREVIEW_LEN;
+  const displayText = isTruncated && !expanded ? seg.text.slice(0, PREVIEW_LEN) + "…" : seg.text;
+
+  const handleCopySegment = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(seg.text).then(() => {
+      setSegCopied(true);
+      setTimeout(() => setSegCopied(false), 1500);
+    });
+  };
+
+  return (
+    <div
+      ref={isActive ? (activeRef as React.RefObject<HTMLDivElement>) : undefined}
+      className="group px-2.5 py-2 rounded-lg transition-all duration-150"
+      style={isActive
+        ? { background: "rgba(139,92,246,0.18)", borderLeft: "2px solid #8b5cf6", marginLeft: 0 }
+        : { borderLeft: "2px solid transparent" }}
+    >
+      <div className="flex gap-2.5 items-start">
+        {/* Timestamp badge — click to seek */}
+        <button
+          onClick={onSeek}
+          title="Jump to this position"
+          className="flex-shrink-0 mt-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold transition-all duration-150 hover:opacity-90"
+          style={isActive
+            ? { background: "rgba(139,92,246,0.4)", color: "#c4b5fd" }
+            : { background: "rgba(255,255,255,0.06)", color: "#606070" }}
+        >
+          {fmtTime(seg.t)}
+        </button>
+
+        {/* Text with speaker highlighting */}
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: isActive ? "#e2d9ff" : "#a0a0b0" }}
+          >
+            {renderWithSpeakers(displayText)}
+          </p>
+          {isTruncated && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+              className="mt-1 text-[11px] font-medium transition-colors hover:opacity-90"
+              style={{ color: "#8b5cf6" }}
+            >
+              {expanded ? "Show less ▴" : "Read more ▾"}
+            </button>
+          )}
+        </div>
+
+        {/* Copy segment button */}
+        <button
+          onClick={handleCopySegment}
+          title="Copy segment"
+          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-white/10"
+          style={{ color: segCopied ? "#22c55e" : "#606070" }}
+        >
+          {segCopied ? (
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -768,6 +934,13 @@ export default function ConverterPage() {
   };
 
   const selectedLang = LANGUAGES.find((l) => l.code === language);
+
+  // Real YouTube timestamps when available; smart-split fallback otherwise (exactly like extension)
+  const realTimestamps = (result?.segments.length ?? 0) > 0;
+  const effectiveSegments = realTimestamps
+    ? (result?.segments ?? [])
+    : result?.transcript ? smartSplitText(result.transcript) : [];
+
   // For "descriptive" type, show AI-generated summary; other types use extractive formatter
   const summaryText = result
     ? summaryType === "descriptive" && aiSummary
@@ -988,7 +1161,8 @@ export default function ConverterPage() {
           {/* Audio Player */}
           <AudioPlayer
             transcript={result.transcript}
-            segments={result.segments}
+            segments={effectiveSegments}
+            realTimestamps={realTimestamps}
             isPro={isPro}
             langBcp47={selectedLang?.bcp47 ?? "en-US"}
             title={result.title}
@@ -1020,41 +1194,30 @@ export default function ConverterPage() {
             {/* ── Transcript Tab ── */}
             {tab === "transcript" && (
               <div className="p-5">
+                {!realTimestamps && effectiveSegments.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg mb-3 text-[11px]" style={{ background: "rgba(255,255,255,0.04)", color: "#606070" }}>
+                    <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Timestamps are estimated — original video had no caption data
+                  </div>
+                )}
                 <div
-                  className="h-72 overflow-y-auto rounded-xl p-3 mb-4 scrollbar-thin space-y-0.5"
+                  className="h-80 overflow-y-auto rounded-xl p-2 mb-4 scrollbar-thin"
                   style={{ background: "#0a0a0f" }}
                 >
-                  {result.segments.length > 0
-                    ? result.segments.map((seg, i) => {
-                        const isActive = i === activeSegIdx;
-                        return (
-                          <div
-                            key={i}
-                            ref={isActive ? activeLineRef : undefined}
-                            onClick={() => seekToSegmentRef.current?.(i)}
-                            className="flex gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer select-none transition-all duration-150 group"
-                            style={isActive
-                              ? { background: "rgba(139,92,246,0.18)", borderLeft: "2px solid #8b5cf6" }
-                              : { borderLeft: "2px solid transparent" }}
-                          >
-                            <span
-                              className="text-[10px] font-mono mt-0.5 flex-shrink-0 w-8 pt-[3px]"
-                              style={{ color: isActive ? "#8b5cf6" : "#606070" }}
-                            >
-                              {fmtTime(seg.t)}
-                            </span>
-                            <span
-                              className="text-sm leading-relaxed"
-                              style={{ color: isActive ? "#e2d9ff" : "#a0a0b0" }}
-                            >
-                              {seg.text}
-                            </span>
-                          </div>
-                        );
-                      })
-                    : result.transcript
-                      ? <p className="text-sm text-[#a0a0b0] p-2 leading-relaxed">{result.transcript}</p>
-                      : <p className="text-sm text-[#606070] p-2">No transcript available.</p>
+                  {effectiveSegments.length > 0
+                    ? effectiveSegments.map((seg, i) => (
+                        <TranscriptSegmentRow
+                          key={i}
+                          seg={seg}
+                          idx={i}
+                          isActive={i === activeSegIdx}
+                          activeRef={i === activeSegIdx ? activeLineRef : undefined}
+                          onSeek={() => seekToSegmentRef.current?.(i)}
+                        />
+                      ))
+                    : <p className="text-sm text-[#606070] p-3">No transcript available.</p>
                   }
                 </div>
                 <div className="flex gap-2">
