@@ -154,9 +154,14 @@ export default async function DashboardPage() {
                 </svg>
                 Recent Conversions
               </h2>
-              <Link href="/app" className="text-xs text-[#8b5cf6] hover:text-[#a78bfa] transition-colors">
-                + New
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link href="/app/history" className="text-xs text-[#606070] hover:text-[#a0a0b0] transition-colors">
+                  View all →
+                </Link>
+                <Link href="/app" className="text-xs text-[#8b5cf6] hover:text-[#a78bfa] transition-colors">
+                  + New
+                </Link>
+              </div>
             </div>
 
             {recentConversions.length === 0 ? (

@@ -590,7 +590,14 @@ export default function ConverterPage() {
   const { user, profile, isPro } = useUser();
 
   // Input state
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(() => {
+    // Pre-fill from ?v=videoId (opened from history)
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("v");
+      if (p) return `https://www.youtube.com/watch?v=${p}`;
+    }
+    return "";
+  });
   const [mode, setMode] = useState<Mode>("full");
   const [language, setLanguage] = useState("original");
 
@@ -635,6 +642,18 @@ export default function ConverterPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  // Auto-convert if ?v=videoId is in the URL (opened from history)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const v = new URLSearchParams(window.location.search).get("v");
+    if (v && user) {
+      // Clear param from URL without reloading
+      window.history.replaceState({}, "", "/app");
+      setTimeout(() => handleConvert(), 300);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Compute AI summary once per result (Gemini Nano → Transformers.js → extractive)
   useEffect(() => {
