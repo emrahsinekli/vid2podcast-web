@@ -339,8 +339,23 @@ function LandingInner() {
   const freeFeatures = tPricing.raw("free.features") as string[];
   const proFeatures = tPricing.raw("pro.features") as string[];
 
+  // FAQPage structured data for Google rich snippets
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": faqItems.map((item) => ({
+      "@type": "Question",
+      "name": item.q,
+      "acceptedAnswer": { "@type": "Answer", "text": item.a },
+    })),
+  };
+
   return (
     <div className="min-h-screen" style={{ background: "#0a0a0f", color: "#f0f0f5" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
       <style>{`
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
         .animate-float { animation: float 6s ease-in-out infinite; }

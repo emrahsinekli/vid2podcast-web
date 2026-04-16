@@ -7,36 +7,44 @@ import { routing } from "@/i18n/routing";
 type Locale = (typeof routing.locales)[number];
 
 // Per-locale metadata (title + description for SEO)
-const localeMetadata: Record<Locale, { title: string; description: string; ogLocale: string }> = {
+const SITE_URL = "https://vid2podcast.com";
+
+const localeMetadata: Record<Locale, { title: string; description: string; ogLocale: string; keywords: string[] }> = {
   en: {
     title: "Vid2Podcast — Turn YouTube Videos into Podcasts",
-    description: "Turn any YouTube video into a podcast in your language. Instant transcript, AI summary, 50+ language translation, and natural audio. Free Chrome extension.",
+    description: "Turn any YouTube video into a podcast in your language. Instant transcript, AI summary, 50+ language translation, and natural audio. Free to start.",
     ogLocale: "en_US",
+    keywords: ["youtube to podcast", "youtube transcript", "ai summary", "youtube translation", "text to speech"],
   },
   es: {
     title: "Vid2Podcast — Convierte Videos de YouTube en Podcasts",
-    description: "Convierte cualquier video de YouTube en un podcast en tu idioma. Transcripción instantánea, resumen con IA, traducción en 50+ idiomas y audio natural. Extensión Chrome gratuita.",
+    description: "Convierte cualquier video de YouTube en un podcast en tu idioma. Transcripción instantánea, resumen con IA, traducción en 50+ idiomas y audio natural. Gratis para empezar.",
     ogLocale: "es_ES",
+    keywords: ["youtube a podcast", "transcripción youtube", "resumen ia youtube", "convertir youtube audio"],
   },
   fr: {
     title: "Vid2Podcast — Transformez les Vidéos YouTube en Podcasts",
-    description: "Transformez n'importe quelle vidéo YouTube en podcast dans votre langue. Transcription instantanée, résumé IA, traduction en 50+ langues et audio naturel. Extension Chrome gratuite.",
+    description: "Transformez n'importe quelle vidéo YouTube en podcast dans votre langue. Transcription instantanée, résumé IA, traduction en 50+ langues et audio naturel. Gratuit pour commencer.",
     ogLocale: "fr_FR",
+    keywords: ["youtube en podcast", "transcription youtube", "résumé ia youtube", "convertir youtube audio"],
   },
   de: {
     title: "Vid2Podcast — YouTube-Videos in Podcasts umwandeln",
-    description: "Wandle jedes YouTube-Video in einen Podcast in deiner Sprache um. Sofortige Transkription, KI-Zusammenfassung, Übersetzung in 50+ Sprachen und natürliches Audio. Kostenlose Chrome-Erweiterung.",
+    description: "Wandle jedes YouTube-Video in einen Podcast in deiner Sprache um. Sofortige Transkription, KI-Zusammenfassung, Übersetzung in 50+ Sprachen und natürliches Audio. Kostenlos starten.",
     ogLocale: "de_DE",
+    keywords: ["youtube zu podcast", "youtube transkript", "ki zusammenfassung youtube", "youtube audio"],
   },
   tr: {
     title: "Vid2Podcast — YouTube Videolarını Podcast'e Dönüştür",
-    description: "Herhangi bir YouTube videosunu kendi dilinde podcast'e dönüştür. Anında transkript, yapay zeka özeti, 50+ dil çevirisi ve doğal ses. Ücretsiz Chrome uzantısı.",
+    description: "Herhangi bir YouTube videosunu kendi dilinde podcast'e dönüştür. Anında transkript, yapay zeka özeti, 50+ dil çevirisi ve doğal ses. Ücretsiz başla.",
     ogLocale: "tr_TR",
+    keywords: ["youtube podcast dönüştürücü", "youtube transkript", "yapay zeka özet", "youtube türkçe çeviri"],
   },
   pt: {
     title: "Vid2Podcast — Transforme Vídeos do YouTube em Podcasts",
-    description: "Transforme qualquer vídeo do YouTube em podcast no seu idioma. Transcrição instantânea, resumo com IA, tradução em 50+ idiomas e áudio natural. Extensão Chrome gratuita.",
+    description: "Transforme qualquer vídeo do YouTube em podcast no seu idioma. Transcrição instantânea, resumo com IA, tradução em 50+ idiomas e áudio natural. Grátis para começar.",
     ogLocale: "pt_BR",
+    keywords: ["youtube para podcast", "transcrição youtube", "resumo ia youtube", "converter youtube audio"],
   },
 };
 
@@ -70,11 +78,16 @@ export async function generateMetadata({
   for (const loc of routing.locales) {
     languages[localeToHreflang[loc]] = getLocalePath(loc);
   }
-  languages["x-default"] = "https://vid2podcast.com";
+  languages["x-default"] = SITE_URL;
+
+  const ogTitle = encodeURIComponent(meta.title.replace("Vid2Podcast — ", ""));
+  const ogDesc = encodeURIComponent(meta.description.split(".")[0]);
+  const ogImage = `${SITE_URL}/og?title=${ogTitle}&desc=${ogDesc}`;
 
   return {
     title: meta.title,
     description: meta.description,
+    keywords: meta.keywords,
     alternates: {
       canonical: getLocalePath(l),
       languages,
@@ -86,13 +99,14 @@ export async function generateMetadata({
       siteName: "Vid2Podcast",
       title: meta.title,
       description: meta.description,
-      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: meta.title }],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: meta.title, type: "image/png" }],
     },
     twitter: {
       card: "summary_large_image",
+      site: "@vid2podcast",
       title: meta.title,
       description: meta.description,
-      images: ["/og-image.png"],
+      images: [ogImage],
     },
   };
 }
