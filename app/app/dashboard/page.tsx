@@ -24,10 +24,10 @@ interface UserProfile {
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="rounded-2xl border p-5" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-      <p className="text-xs font-medium text-[#606070] uppercase tracking-wider mb-2">{label}</p>
-      <div className="text-2xl font-bold text-[#f0f0f5] mb-1">{value}</div>
-      {sub && <p className="text-xs text-[#606070]">{sub}</p>}
+    <div className="rounded-2xl border p-5" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+      <p className="text-xs font-medium text-[var(--text3)] uppercase tracking-wider mb-2">{label}</p>
+      <div className="text-2xl font-bold text-[var(--text)] mb-1">{value}</div>
+      {sub && <p className="text-xs text-[var(--text3)]">{sub}</p>}
     </div>
   );
 }
@@ -93,8 +93,8 @@ export default async function DashboardPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* ── Header ── */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#f0f0f5] mb-1">Dashboard</h1>
-        <p className="text-sm text-[#606070]">Manage your account, track usage, and view history</p>
+        <h1 className="text-2xl font-bold text-[var(--text)] mb-1">Dashboard</h1>
+        <p className="text-sm text-[var(--text3)]">Manage your account, track usage, and view history</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -102,8 +102,8 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* Usage Card */}
-          <div className="rounded-2xl border p-6" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-            <h2 className="font-semibold text-[#f0f0f5] mb-5 flex items-center gap-2">
+          <div className="rounded-2xl border p-6" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+            <h2 className="font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
               <svg className="w-4 h-4 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
 
             {isPro ? (
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
                   <div className="h-full rounded-full" style={{ width: "100%", background: "linear-gradient(90deg, #22c55e, #16a34a)" }} />
                 </div>
                 <span className="text-sm font-semibold text-[#22c55e]">Unlimited</span>
@@ -120,10 +120,10 @@ export default async function DashboardPage() {
             ) : (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-[#a0a0b0]">Conversions today</span>
-                  <span className="text-sm font-semibold text-[#f0f0f5]">{usedToday} / 1</span>
+                  <span className="text-sm text-[var(--text2)]">Conversions today</span>
+                  <span className="text-sm font-semibold text-[var(--text)]">{usedToday} / 1</span>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden mb-4" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="h-2 rounded-full overflow-hidden mb-4" style={{ background: "var(--border)" }}>
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
@@ -146,16 +146,16 @@ export default async function DashboardPage() {
           </div>
 
           {/* Recent Conversions */}
-          <div className="rounded-2xl border" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-              <h2 className="font-semibold text-[#f0f0f5] flex items-center gap-2">
+          <div className="rounded-2xl border" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+              <h2 className="font-semibold text-[var(--text)] flex items-center gap-2">
                 <svg className="w-4 h-4 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Recent Conversions
               </h2>
               <div className="flex items-center gap-3">
-                <Link href="/app/history" className="text-xs text-[#606070] hover:text-[#a0a0b0] transition-colors">
+                <Link href="/app/history" className="text-xs text-[var(--text3)] hover:text-[var(--text2)] transition-colors">
                   View all →
                 </Link>
                 <Link href="/app" className="text-xs text-[#8b5cf6] hover:text-[#a78bfa] transition-colors">
@@ -166,13 +166,13 @@ export default async function DashboardPage() {
 
             {recentConversions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <svg className="w-6 h-6 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: "var(--bg3)" }}>
+                  <svg className="w-6 h-6 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                   </svg>
                 </div>
-                <p className="text-sm text-[#606070] mb-1">No conversions yet</p>
-                <p className="text-xs text-[#606070] opacity-60 mb-4">Convert your first YouTube video to get started</p>
+                <p className="text-sm text-[var(--text3)] mb-1">No conversions yet</p>
+                <p className="text-xs text-[var(--text3)] opacity-60 mb-4">Convert your first YouTube video to get started</p>
                 <Link
                   href="/app"
                   className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
                 </Link>
               </div>
             ) : (
-              <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+              <div className="divide-y" style={{ borderColor: "var(--border2)" }}>
                 {recentConversions.map((conv) => (
                   <div key={conv.id} className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
                     <img
@@ -192,9 +192,9 @@ export default async function DashboardPage() {
                       loading="lazy"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#f0f0f5] truncate mb-1">{conv.title || "Untitled Video"}</p>
+                      <p className="text-sm font-medium text-[var(--text)] truncate mb-1">{conv.title || "Untitled Video"}</p>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-[#606070]">{formatDate(conv.created_at)}</span>
+                        <span className="text-xs text-[var(--text3)]">{formatDate(conv.created_at)}</span>
                         {conv.language && conv.language !== "original" && (
                           <span
                             className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
@@ -207,8 +207,8 @@ export default async function DashboardPage() {
                     </div>
                     <Link
                       href={`/app?v=${conv.video_id}`}
-                      className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-[#a0a0b0] border transition-all hover:bg-white/5 hover:text-[#f0f0f5]"
-                      style={{ borderColor: "rgba(255,255,255,0.1)" }}
+                      className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text2)] border transition-all hover:bg-white/5 hover:text-[var(--text)]"
+                      style={{ borderColor: "var(--border)" }}
                     >
                       Open
                     </Link>
@@ -223,8 +223,8 @@ export default async function DashboardPage() {
         <div className="space-y-6">
 
           {/* Subscription Card */}
-          <div className="rounded-2xl border p-6" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-            <h2 className="font-semibold text-[#f0f0f5] mb-4 flex items-center gap-2">
+          <div className="rounded-2xl border p-6" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+            <h2 className="font-semibold text-[var(--text)] mb-4 flex items-center gap-2">
               <svg className="w-4 h-4 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
               </svg>
@@ -232,13 +232,13 @@ export default async function DashboardPage() {
             </h2>
 
             <div className="flex items-center justify-between mb-5">
-              <span className="text-sm text-[#a0a0b0]">Current Plan</span>
+              <span className="text-sm text-[var(--text2)]">Current Plan</span>
               {isPro ? (
                 <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>
                   PRO
                 </span>
               ) : (
-                <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: "rgba(255,255,255,0.08)", color: "#a0a0b0" }}>
+                <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: "var(--border)", color: "var(--text2)" }}>
                   FREE
                 </span>
               )}
@@ -246,8 +246,8 @@ export default async function DashboardPage() {
 
             <div className="space-y-2 mb-5">
               {(isPro ? proFeatures : freeFeatures).map((f) => (
-                <div key={f} className="flex items-center gap-2 text-xs text-[#a0a0b0]">
-                  <svg className={`w-3.5 h-3.5 flex-shrink-0 ${isPro ? "text-[#22c55e]" : "text-[#606070]"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div key={f} className="flex items-center gap-2 text-xs text-[var(--text2)]">
+                  <svg className={`w-3.5 h-3.5 flex-shrink-0 ${isPro ? "text-[#22c55e]" : "text-[var(--text3)]"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                   {f}
@@ -258,8 +258,8 @@ export default async function DashboardPage() {
             {isPro ? (
               <a
                 href="mailto:support@vid2podcast.com?subject=Billing"
-                className="block w-full text-center py-2.5 rounded-xl text-sm font-semibold border transition-all hover:bg-white/5 text-[#a0a0b0]"
-                style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                className="block w-full text-center py-2.5 rounded-xl text-sm font-semibold border transition-all hover:bg-white/5 text-[var(--text2)]"
+                style={{ borderColor: "var(--border)" }}
               >
                 Manage Billing
               </a>
@@ -276,7 +276,7 @@ export default async function DashboardPage() {
             )}
 
             {!isPro && (
-              <p className="text-center text-[10px] text-[#606070] mt-3">One-time payment · No subscription · Forever access</p>
+              <p className="text-center text-[10px] text-[var(--text3)] mt-3">One-time payment · No subscription · Forever access</p>
             )}
           </div>
 
@@ -292,12 +292,12 @@ export default async function DashboardPage() {
                   { feature: "Summary word limit", free: "80 words", pro: "Full" },
                 ].map((row) => (
                   <div key={row.feature} className="grid grid-cols-3 gap-2 text-xs">
-                    <span className="text-[#606070]">{row.feature}</span>
-                    <span className="text-center text-[#606070]">{row.free}</span>
+                    <span className="text-[var(--text3)]">{row.feature}</span>
+                    <span className="text-center text-[var(--text3)]">{row.free}</span>
                     <span className="text-center font-semibold text-[#22c55e]">{row.pro}</span>
                   </div>
                 ))}
-                <div className="grid grid-cols-3 gap-2 text-[10px] text-[#606070] pb-2 border-b mb-1 mt-1" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                <div className="grid grid-cols-3 gap-2 text-[10px] text-[var(--text3)] pb-2 border-b mb-1 mt-1" style={{ borderColor: "var(--border2)" }}>
                   <span />
                   <span className="text-center">Free</span>
                   <span className="text-center text-[#a78bfa]">Pro</span>
@@ -310,15 +310,15 @@ export default async function DashboardPage() {
           <Link
             href="/app/settings"
             className="flex items-center justify-between px-4 py-3 rounded-2xl border transition-all hover:bg-white/[0.03]"
-            style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}
+            style={{ background: "var(--bg2)", borderColor: "var(--border)" }}
           >
-            <span className="flex items-center gap-2 text-sm font-medium text-[#a0a0b0]">
+            <span className="flex items-center gap-2 text-sm font-medium text-[var(--text2)]">
               <svg className="w-4 h-4 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Account Settings
             </span>
-            <svg className="w-4 h-4 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Link>

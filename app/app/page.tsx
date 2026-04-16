@@ -1,12 +1,49 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES, POLAR_BUY_URL } from "@/lib/constants";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES, POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
 import { summarize, SummaryType } from "@/lib/summary";
 import { freeAISummarize, freeAIAnswer, canUseAI } from "@/lib/free-ai";
 import { extractVideoId, extractPlaylistId, parseInputUrls } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
 import { createClient } from "@/supabase/client";
+
+// ─── IndexedDB Audio Cache ───────────────────────────────────────────────────
+const IDB_NAME = "v2p_audio";
+const IDB_STORE = "blobs";
+
+function openAudioDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGet(key: string): Promise<Blob | null> {
+  try {
+    const db = await openAudioDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+async function idbSet(key: string, blob: Blob): Promise<void> {
+  try {
+    const db = await openAudioDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(blob, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* silently fail */ }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Mode = "full" | "summary" | "podcast";
@@ -43,45 +80,103 @@ interface ConversionResult {
 }
 
 // ─── Pro Wall Modal ──────────────────────────────────────────────────────────
-function ProWallModal({ onClose }: { onClose: () => void }) {
+function ProWallModal({ onClose, reason }: { onClose: () => void; reason?: "limit" | "feature" }) {
+  const plans = [
+    { label: "Monthly", price: "$9.99", period: "/mo", url: POLAR_MONTHLY_URL, highlight: false },
+    { label: "Yearly", price: "$6.67", period: "/mo", badge: "Save 33%", url: POLAR_YEARLY_URL, highlight: true },
+    { label: "Lifetime", price: "$149", period: " once", badge: "Best Value", url: POLAR_LIFETIME_URL, highlight: false },
+  ];
+  const features = [
+    { icon: "🎙️", text: "Google Neural2 natural voices" },
+    { icon: "♾️", text: "Unlimited conversions per day" },
+    { icon: "🤖", text: "Unlimited AI chat & summaries" },
+    { icon: "🌍", text: "50+ language translation" },
+    { icon: "⬇️", text: "MP3 download for every podcast" },
+    { icon: "📜", text: "Full history — 365 days" },
+  ];
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border p-8 shadow-2xl" style={{ background: "#111118", borderColor: "rgba(139,92,246,0.3)" }}>
-        <button onClick={onClose} className="absolute right-4 top-4 text-[#606070] hover:text-[#f0f0f5] transition-colors">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(139,92,246,0.15)" }}>
-            <svg className="w-8 h-8 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      <div className="relative w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ background: "var(--bg2)", border: "1px solid rgba(139,92,246,0.25)", maxHeight: "92vh", overflowY: "auto" }}>
+        {/* Purple glow top bar */}
+        <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #7c6ef5, #c084fc, #7c6ef5)" }} />
+
+        <div className="p-5 sm:p-7">
+          {/* Close */}
+          <button onClick={onClose} className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full transition-colors" style={{ background: "var(--bg3)", color: "var(--text3)" }}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
+          </button>
+
+          {/* Header */}
+          <div className="text-center mb-5">
+            {reason === "limit" ? (
+              <>
+                <div className="text-3xl mb-2">🚀</div>
+                <h2 className="text-xl font-bold text-[var(--text)] mb-1">You've hit today's limit</h2>
+                <p className="text-sm text-[var(--text2)]">Free plan: <strong>1 conversion/day</strong>. Upgrade to convert unlimited videos.</p>
+              </>
+            ) : (
+              <>
+                <div className="text-3xl mb-2">⚡</div>
+                <h2 className="text-xl font-bold text-[var(--text)] mb-1">Unlock Pro Features</h2>
+                <p className="text-sm text-[var(--text2)]">Take your podcast experience to the next level.</p>
+              </>
+            )}
           </div>
-          <h2 className="text-2xl font-bold text-[#f0f0f5] mb-2">Pro Feature</h2>
-          <p className="text-[#a0a0b0] mb-6 text-sm leading-relaxed">
-            Google Neural2 voices are available on the Pro plan. Upgrade once, use forever — no subscription needed.
-          </p>
-          <ul className="text-left space-y-2.5 mb-8">
-            {["Google Neural2 high-quality voices", "Unlimited conversions", "Unlimited AI chat", "All summary types"].map((f) => (
-              <li key={f} className="flex items-center gap-2.5 text-sm text-[#a0a0b0]">
-                <svg className="w-4 h-4 text-[#22c55e] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-                {f}
-              </li>
+
+          {/* Features grid */}
+          <div className="grid grid-cols-2 gap-2 mb-5">
+            {features.map((f) => (
+              <div key={f.text} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[var(--text2)]" style={{ background: "var(--bg3)" }}>
+                <span className="text-base flex-shrink-0">{f.icon}</span>
+                <span>{f.text}</span>
+              </div>
             ))}
-          </ul>
+          </div>
+
+          {/* Pricing plans */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {plans.map((p) => (
+              <a
+                key={p.label}
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative flex flex-col items-center justify-center py-3 px-2 rounded-xl text-center transition-all duration-200 hover:scale-[1.03] hover:shadow-lg"
+                style={p.highlight
+                  ? { background: "linear-gradient(135deg, #7c6ef5 0%, #5b4fe0 100%)", border: "2px solid #a78bfa", color: "#fff", boxShadow: "0 4px 20px rgba(124,110,245,0.35)" }
+                  : { background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)" }
+                }
+              >
+                {p.badge && (
+                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                    style={{ background: p.highlight ? "#fbbf24" : "rgba(124,110,245,0.9)", color: p.highlight ? "#000" : "#fff" }}>
+                    {p.badge}
+                  </span>
+                )}
+                <span className="text-[10px] font-semibold opacity-70 mb-0.5">{p.label}</span>
+                <span className="text-lg font-bold leading-tight">{p.price}</span>
+                <span className="text-[10px] opacity-60">{p.period}</span>
+              </a>
+            ))}
+          </div>
+
+          {/* CTA */}
           <a
-            href={POLAR_BUY_URL}
+            href={POLAR_YEARLY_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full py-3 rounded-xl font-semibold text-white text-center transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/25"
-            style={{ background: "#8b5cf6" }}
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/30"
+            style={{ background: "linear-gradient(135deg, #7c6ef5 0%, #5b4fe0 100%)" }}
           >
-            Upgrade to Pro — from $9.99/mo
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Get Pro — Start at $6.67/mo
           </a>
+          <p className="text-center text-[10px] text-[var(--text3)] mt-2">No risk · Cancel anytime · Instant access</p>
         </div>
       </div>
     </div>
@@ -95,10 +190,10 @@ function LoadingOrb({ msg }: { msg?: string }) {
       <div className="relative w-20 h-20 mb-6">
         <div className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ background: "#8b5cf6" }} />
         <div className="absolute inset-2 rounded-full animate-pulse" style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }} />
-        <div className="absolute inset-5 rounded-full bg-[#0a0a0f]" />
+        <div className="absolute inset-5 rounded-full bg-[var(--bg)]" />
         <div className="absolute inset-6 rounded-full animate-spin" style={{ border: "2px solid transparent", borderTopColor: "#a78bfa" }} />
       </div>
-      <p className="text-[#a0a0b0] text-sm animate-pulse">{msg ?? "Fetching transcript..."}</p>
+      <p className="text-[var(--text2)] text-sm animate-pulse">{msg ?? "Fetching transcript..."}</p>
     </div>
   );
 }
@@ -200,6 +295,8 @@ function AudioPlayer({
   onProWall,
   onSegmentChange,
   seekToSegmentRef,
+  generateTrigger,
+  cacheKey,
 }: {
   transcript: string;
   segments: { t: number; text: string }[];
@@ -211,6 +308,8 @@ function AudioPlayer({
   onProWall: () => void;
   onSegmentChange?: (segIdx: number) => void;
   seekToSegmentRef?: React.MutableRefObject<((segIdx: number) => void) | null>;
+  generateTrigger?: number;
+  cacheKey?: string;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -220,6 +319,9 @@ function AudioPlayer({
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
+  const [speedOpen, setSpeedOpen] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [loop, setLoop] = useState(false);
   const prevTranscriptRef = useRef(transcript);
 
   // Reset when transcript changes (new video loaded)
@@ -234,6 +336,36 @@ function AudioPlayer({
     setDuration(0);
     setGenProgress(0);
   }, [transcript]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-generate audio when triggered from history (check IDB cache first)
+  useEffect(() => {
+    if (!generateTrigger || audioUrl || generating) return;
+    const run = async () => {
+      // Check IDB cache first
+      if (cacheKey) {
+        const cached = await idbGet(cacheKey);
+        if (cached) {
+          const url = URL.createObjectURL(cached);
+          setAudioUrl(url);
+          if (audioRef.current) {
+            audioRef.current.src = url;
+            audioRef.current.playbackRate = speed;
+            audioRef.current.load();
+          }
+          return;
+        }
+      }
+      generateAudio().then((url) => {
+        if (audioRef.current && url) {
+          audioRef.current.src = url;
+          audioRef.current.playbackRate = speed;
+          audioRef.current.load();
+        }
+      }).catch(console.error);
+    };
+    run();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generateTrigger]);
 
   const generateAudio = async (): Promise<string> => {
     setGenerating(true);
@@ -257,7 +389,10 @@ function AudioPlayer({
     const merged = new Uint8Array(total);
     let offset = 0;
     for (const buf of buffers) { merged.set(new Uint8Array(buf), offset); offset += buf.byteLength; }
-    const url = URL.createObjectURL(new Blob([merged], { type: "audio/mpeg" }));
+    const blob = new Blob([merged], { type: "audio/mpeg" });
+    // Save to IDB cache for future history loads
+    if (cacheKey) idbSet(cacheKey, blob);
+    const url = URL.createObjectURL(blob);
     setAudioUrl(url);
     setGenerating(false);
     return url;
@@ -286,6 +421,28 @@ function AudioPlayer({
     }
   };
 
+  // Precompute cumulative char offsets for char-based sync (TTS audio has no YouTube timestamps)
+  const segCharOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let cum = 0;
+    for (const seg of segments) { offsets.push(cum); cum += seg.text.length; }
+    offsets.push(cum); // sentinel
+    return offsets;
+  }, [segments]);
+
+  const activeSegFromTime = (cur: number, dur: number): number => {
+    if (!segments.length || dur <= 0) return 0;
+    const totalChars = segCharOffsets[segCharOffsets.length - 1];
+    if (totalChars === 0) return Math.min(Math.floor((cur / dur) * segments.length), segments.length - 1);
+    const targetChars = (cur / dur) * totalChars;
+    let lo = 0, hi = segments.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (segCharOffsets[mid] <= targetChars) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  };
+
   const handleTimeUpdate = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -294,43 +451,38 @@ function AudioPlayer({
     setElapsed(cur);
     setDuration(dur);
     if (segments.length > 0 && dur > 0) {
-      let active = 0;
-      if (realTimestamps) {
-        // Extension approach: find last segment where seg.t <= currentTime
-        for (let i = 0; i < segments.length; i++) {
-          if (segments[i].t <= cur) active = i;
-          else break;
-        }
-      } else {
-        // Smart-split estimated timestamps: proportional
-        active = Math.min(Math.floor((cur / dur) * segments.length), segments.length - 1);
-      }
-      onSegmentChange?.(active);
+      onSegmentChange?.(activeSegFromTime(cur, dur));
     }
   };
 
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const seekFromClientX = (clientX: number, rect: DOMRect) => {
     const audio = audioRef.current;
     if (!audio || !duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    audio.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width * duration, duration));
+    audio.currentTime = Math.max(0, Math.min((clientX - rect.left) / rect.width * duration, duration));
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    seekFromClientX(e.clientX, e.currentTarget.getBoundingClientRect());
   };
 
   const handleProgressDrag = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.buttons !== 1) return;
-    handleProgressClick(e);
+    seekFromClientX(e.clientX, e.currentTarget.getBoundingClientRect());
+  };
+
+  const handleProgressTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const touch = e.touches[0] || e.changedTouches[0];
+    if (!touch) return;
+    seekFromClientX(touch.clientX, e.currentTarget.getBoundingClientRect());
   };
 
   const seekToSegment = (segIdx: number) => {
     const audio = audioRef.current;
-    if (!audio || !segments.length) return;
-    if (realTimestamps) {
-      // Extension approach: seek to real YouTube timestamp
-      audio.currentTime = Math.min(segments[segIdx]?.t ?? 0, (duration || 9999) - 0.5);
-    } else {
-      // Estimated timestamps: proportional
-      audio.currentTime = duration > 0 ? (segIdx / segments.length) * duration : 0;
-    }
+    if (!audio || !segments.length || !duration) return;
+    const totalChars = segCharOffsets[segCharOffsets.length - 1];
+    const ratio = totalChars > 0 ? segCharOffsets[segIdx] / totalChars : segIdx / segments.length;
+    audio.currentTime = Math.min(ratio * duration, duration - 0.1);
     if (!playing) audio.play().catch(() => {});
   };
 
@@ -348,7 +500,7 @@ function AudioPlayer({
   const isTruncated = !isPro && transcript.length > 8000;
 
   return (
-    <div className="rounded-2xl border p-5" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+    <div className="rounded-2xl border p-5" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
@@ -356,141 +508,194 @@ function AudioPlayer({
         onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => {
+          if (loop && audioRef.current) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(() => {});
+          } else {
+            setPlaying(false);
+          }
+        }}
         style={{ display: "none" }}
       />
 
       {/* Header row */}
       <div className="flex items-center gap-3 mb-3">
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${playing ? "bg-[#22c55e] animate-pulse" : generating ? "bg-[#8b5cf6] animate-pulse" : "bg-[#606070]"}`} />
-        <span className="text-sm font-medium text-[#f0f0f5]">Podcast Audio</span>
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${playing ? "bg-[#22c55e] animate-pulse" : generating ? "bg-[#8b5cf6] animate-pulse" : "bg-[var(--text3)]"}`} />
+        <span className="text-sm font-medium text-[var(--text)]">Podcast Audio</span>
         <div className="ml-auto flex items-center gap-2">
           {generating && (
             <span className="text-xs text-[#8b5cf6] animate-pulse">{genProgress}% generating…</span>
           )}
           {duration > 0 && (
-            <span className="text-xs font-mono" style={{ color: "#a0a0b0" }}>
+            <span className="text-xs font-mono" style={{ color: "var(--text2)" }}>
               {fmtTime(elapsed)} / {fmtTime(duration)}
             </span>
           )}
         </div>
       </div>
 
-      {/* Progress bar — clickable + draggable */}
+      {/* Progress bar — clickable + draggable + touch */}
       <div
-        className="relative h-3 rounded-full mb-4 cursor-pointer group"
-        style={{ background: "rgba(255,255,255,0.08)" }}
+        className="relative h-4 rounded-full mb-4 cursor-pointer group touch-none"
+        style={{ background: "var(--border)" }}
         onClick={handleProgressClick}
         onMouseMove={handleProgressDrag}
+        onTouchStart={handleProgressTouch}
+        onTouchMove={handleProgressTouch}
       >
         <div
           className="absolute inset-y-0 left-0 rounded-full"
           style={{ width: `${progress}%`, background: "linear-gradient(90deg, #8b5cf6, #a78bfa)", transition: duration > 0 ? "width 0.2s linear" : "none" }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ left: `calc(${progress}% - 7px)`, pointerEvents: "none" }}
+          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"
+          style={{ left: `calc(${progress}% - 8px)`, pointerEvents: "none" }}
         />
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Back 15s */}
-        <button
-          onClick={() => skip(-15)}
-          disabled={!audioUrl}
-          title="Back 15s"
-          className="w-8 h-8 flex items-center justify-center rounded-full text-[#606070] hover:text-[#a0a0b0] disabled:opacity-30 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
-          </svg>
-        </button>
-
-        {/* Play / Pause */}
-        <button
-          onClick={handlePlayPause}
-          disabled={generating}
-          className="flex items-center justify-center w-11 h-11 rounded-full text-white transition-all duration-200 hover:scale-105 disabled:opacity-50 flex-shrink-0"
-          style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}
-        >
-          {generating ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : playing ? (
+      <div className="flex flex-col gap-3">
+        {/* Row 1: back / play / fwd / loop / speed-toggle / volume */}
+        <div className="flex items-center gap-1.5">
+          {/* Back 15s */}
+          <button onClick={() => skip(-15)} disabled={!audioUrl} title="Back 15s"
+            className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text3)] hover:text-[var(--text2)] disabled:opacity-30 transition-colors">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
             </svg>
-          ) : (
-            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
+          </button>
+
+          {/* Play / Pause */}
+          <button onClick={handlePlayPause} disabled={generating}
+            className="flex items-center justify-center w-11 h-11 rounded-full text-white transition-all duration-200 hover:scale-105 disabled:opacity-50 flex-shrink-0"
+            style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}>
+            {generating ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : playing ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+            ) : (
+              <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+
+          {/* Forward 15s */}
+          <button onClick={() => skip(15)} disabled={!audioUrl} title="Forward 15s"
+            className="w-9 h-9 flex items-center justify-center rounded-full text-[var(--text3)] hover:text-[var(--text2)] disabled:opacity-30 transition-colors">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z" />
             </svg>
-          )}
-        </button>
+          </button>
 
-        {/* Forward 15s */}
-        <button
-          onClick={() => skip(15)}
-          disabled={!audioUrl}
-          title="Forward 15s"
-          className="w-8 h-8 flex items-center justify-center rounded-full text-[#606070] hover:text-[#a0a0b0] disabled:opacity-30 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z" />
-          </svg>
-        </button>
+          {/* Loop toggle */}
+          <button
+            onClick={() => setLoop((l) => !l)}
+            title={loop ? "Loop on" : "Loop off"}
+            className="w-9 h-9 flex items-center justify-center rounded-full transition-colors"
+            style={loop ? { color: "#a78bfa", background: "rgba(139,92,246,0.15)" } : { color: "var(--text3)" }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
 
-        {/* Speed */}
-        <div className="flex items-center gap-1 ml-1">
-          {[0.75, 1, 1.25, 1.5, 2].map((s) => (
+          {/* Speed — desktop: inline buttons; mobile: single toggle button */}
+          <div className="relative">
+            {/* Mobile: single button showing current speed */}
             <button
-              key={s}
-              onClick={() => { setSpeed(s); if (audioRef.current) audioRef.current.playbackRate = s; }}
-              className={`px-1.5 py-0.5 rounded-md text-[11px] font-medium transition-all duration-150 ${speed === s ? "" : "text-[#606070] hover:text-[#a0a0b0]"}`}
-              style={speed === s ? { background: "rgba(139,92,246,0.3)", color: "#a78bfa" } : {}}
+              onClick={() => setSpeedOpen((o) => !o)}
+              className="sm:hidden w-9 h-9 flex items-center justify-center rounded-full text-[10px] font-bold transition-colors"
+              style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}
             >
-              {s}x
+              {speed}x
             </button>
-          ))}
+            {/* Mobile speed dropdown */}
+            {speedOpen && (
+              <div className="sm:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-2 flex flex-col gap-1 rounded-xl border p-1.5 z-10 shadow-lg"
+                style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+                {[0.75, 1, 1.25, 1.5, 2].map((s) => (
+                  <button key={s}
+                    onClick={() => { setSpeed(s); if (audioRef.current) audioRef.current.playbackRate = s; setSpeedOpen(false); }}
+                    className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                    style={speed === s ? { background: "rgba(139,92,246,0.3)", color: "#a78bfa" } : { color: "var(--text2)" }}>
+                    {s}x
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Desktop: inline speed buttons */}
+            <div className="hidden sm:flex items-center gap-0.5">
+              {[0.75, 1, 1.25, 1.5, 2].map((s) => (
+                <button key={s}
+                  onClick={() => { setSpeed(s); if (audioRef.current) audioRef.current.playbackRate = s; }}
+                  className={`px-1.5 py-0.5 rounded-md text-[11px] font-medium transition-all duration-150 ${speed === s ? "" : "text-[var(--text3)] hover:text-[var(--text2)]"}`}
+                  style={speed === s ? { background: "rgba(139,92,246,0.3)", color: "#a78bfa" } : {}}>
+                  {s}x
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Volume — takes remaining space */}
+          <div className="flex items-center gap-1.5 flex-1 ml-1">
+            <button
+              onClick={() => { const v = volume > 0 ? 0 : 1; setVolume(v); if (audioRef.current) audioRef.current.volume = v; }}
+              className="text-[var(--text3)] hover:text-[var(--text2)] transition-colors flex-shrink-0"
+            >
+              {volume === 0 ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              ) : volume < 0.5 ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6a7 7 0 010 12M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              )}
+            </button>
+            <input
+              type="range" min="0" max="1" step="0.05" value={volume}
+              onChange={(e) => { const v = parseFloat(e.target.value); setVolume(v); if (audioRef.current) audioRef.current.volume = v; }}
+              className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+              style={{ accentColor: "#8b5cf6", background: `linear-gradient(to right, #8b5cf6 ${volume * 100}%, var(--border) ${volume * 100}%)` }}
+            />
+          </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          {/* Download MP3 — visible once audio is ready */}
+        {/* Row 2: download + quality badge */}
+        <div className="flex items-center gap-2">
           {audioUrl && (
-            <a
-              href={audioUrl}
+            <a href={audioUrl}
               download={`${(title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_")}.mp3`}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-90"
-              style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}
-            >
+              style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               MP3
             </a>
           )}
-
-          {/* Voice quality badge */}
           {isPro ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}>
-              Neural2
-            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}>Neural2</span>
           ) : (
-            <button
-              onClick={onProWall}
-              className="px-2 py-0.5 rounded-full text-[10px] font-medium hover:opacity-90 transition-opacity"
-              style={{ background: "rgba(255,255,255,0.05)", color: "#606070", border: "1px solid rgba(255,255,255,0.08)" }}
-            >
+            <button onClick={onProWall} className="px-2 py-0.5 rounded-full text-[10px] font-medium hover:opacity-90 transition-opacity"
+              style={{ background: "var(--bg3)", color: "var(--text3)", border: "1px solid var(--border)" }}>
               Upgrade for Neural2
             </button>
           )}
         </div>
       </div>
+      </div>
 
       {isTruncated && (
-        <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "#606070" }}>
+        <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "var(--text3)" }}>
           Audio limited to first ~8,000 chars on Free plan.{" "}
           <a href={POLAR_BUY_URL} className="underline" style={{ color: "#8b5cf6" }}>Upgrade for full audio</a>
         </p>
@@ -538,8 +743,8 @@ function TranscriptSegmentRow({
           title="Jump to this position"
           className="flex-shrink-0 mt-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold transition-all duration-150 hover:opacity-90"
           style={isActive
-            ? { background: "rgba(139,92,246,0.4)", color: "#c4b5fd" }
-            : { background: "rgba(255,255,255,0.06)", color: "#606070" }}
+            ? { background: "rgba(139,92,246,0.25)", color: "var(--accent)" }
+            : { background: "var(--bg3)", color: "var(--text3)" }}
         >
           {fmtTime(seg.t)}
         </button>
@@ -548,7 +753,7 @@ function TranscriptSegmentRow({
         <div className="flex-1 min-w-0">
           <p
             className="text-sm leading-relaxed"
-            style={{ color: isActive ? "#e2d9ff" : "#a0a0b0" }}
+            style={{ color: isActive ? "var(--text)" : "var(--text2)" }}
           >
             {renderWithSpeakers(displayText)}
           </p>
@@ -568,7 +773,7 @@ function TranscriptSegmentRow({
           onClick={handleCopySegment}
           title="Copy segment"
           className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-white/10"
-          style={{ color: segCopied ? "#22c55e" : "#606070" }}
+          style={{ color: segCopied ? "#22c55e" : "var(--text3)" }}
         >
           {segCopied ? (
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -601,6 +806,13 @@ export default function ConverterPage() {
   const [mode, setMode] = useState<Mode>("full");
   const [language, setLanguage] = useState("original");
 
+  // Sync default language from user settings
+  useEffect(() => {
+    if (profile?.settings?.defaultLanguage && profile.settings.defaultLanguage !== "original") {
+      setLanguage(profile.settings.defaultLanguage);
+    }
+  }, [profile?.id]);
+
   // Queue / playlist
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [queueRunning, setQueueRunning] = useState(false);
@@ -630,6 +842,8 @@ export default function ConverterPage() {
 
   // Pro wall
   const [showProWall, setShowProWall] = useState(false);
+  const [proWallReason, setProWallReason] = useState<"limit" | "feature">("feature");
+  const openProWall = (reason: "limit" | "feature" = "feature") => { setProWallReason(reason); setShowProWall(true); };
 
   // Transcript sync
   const [activeSegIdx, setActiveSegIdx] = useState(-1);
@@ -638,20 +852,68 @@ export default function ConverterPage() {
 
   // Misc
   const [copied, setCopied] = useState(false);
+  const [audioGenTrigger, setAudioGenTrigger] = useState(0);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Auto-convert if ?v=videoId is in the URL (opened from history)
+  // Open from history: load transcript from Supabase (skip re-fetching from YouTube)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const v = new URLSearchParams(window.location.search).get("v");
-    if (v && user) {
-      // Clear param from URL without reloading
-      window.history.replaceState({}, "", "/app");
-      setTimeout(() => handleConvert(), 300);
-    }
+    if (!v || !user) return;
+    window.history.replaceState({}, "", "/app");
+    const load = async () => {
+      setLoading(true);
+      setLoadingMsg("Loading from history…");
+      setError("");
+      setResult(null);
+      setChatMessages([]);
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("conversions")
+          .select("video_id, video_title, transcript_text, language")
+          .eq("user_id", user.id)
+          .eq("video_id", v)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+        if (data?.transcript_text) {
+          const lang = data.language ?? "original";
+          setLanguage(lang);
+          const convResult: ConversionResult = {
+            videoId: data.video_id,
+            title: data.video_title ?? "YouTube Video",
+            author: "",
+            transcript: data.transcript_text,
+            segments: [],
+          };
+          setResult(convResult);
+          setTab("transcript");
+          // Trigger audio — IDB cache checked first inside AudioPlayer
+          setAudioGenTrigger((t) => t + 1);
+        } else {
+          // Fallback: re-convert from YouTube
+          setUrl(`https://www.youtube.com/watch?v=${v}`);
+          setTimeout(async () => {
+            await handleConvert();
+            setAudioGenTrigger((t) => t + 1);
+          }, 100);
+        }
+      } catch {
+        // Fallback: re-convert from YouTube
+        setUrl(`https://www.youtube.com/watch?v=${v}`);
+        setTimeout(async () => {
+          await handleConvert();
+          setAudioGenTrigger((t) => t + 1);
+        }, 100);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -681,13 +943,15 @@ export default function ConverterPage() {
     const res = await fetch(`${BACKEND_URL}/api/transcript`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ videoId }),
+      body: JSON.stringify({ videoId, isPro }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       throw new Error((d as { error?: string }).error ?? `Server error ${res.status}`);
     }
-    const data = await res.json() as { title?: string; author?: string; transcript?: string; segments?: { t: number; text: string }[] };
+    const data = await res.json() as { title?: string; author?: string; transcript?: string; segments?: { t: number; text: string }[]; error?: string; limitReached?: boolean };
+    if (data.limitReached) { openProWall("limit"); throw new Error("limit"); }
+    if (data.error) throw new Error(data.error);
     let transcript = data.transcript ?? "";
     let segments = data.segments ?? [];
     if (language !== "original" && transcript) {
@@ -746,7 +1010,6 @@ export default function ConverterPage() {
             video_id: convResult.videoId,
             video_url: `https://www.youtube.com/watch?v=${convResult.videoId}`,
             video_title: convResult.title,
-            title: convResult.title,
             language: language === "original" ? "original" : language,
             transcript_text: convResult.transcript,
           });
@@ -818,7 +1081,7 @@ export default function ConverterPage() {
         .gte("created_at", today);
 
       if ((count ?? 0) >= FREE_LIMIT) {
-        setError(`Free plan allows ${FREE_LIMIT} conversion per day. Upgrade to Pro for unlimited access.`);
+        openProWall("limit");
         return;
       }
     }
@@ -837,7 +1100,7 @@ export default function ConverterPage() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ videoId }),
+        body: JSON.stringify({ videoId, isPro }),
       });
 
       if (!res.ok) {
@@ -846,6 +1109,8 @@ export default function ConverterPage() {
       }
 
       const data = await res.json();
+      if (data.limitReached) { openProWall("limit"); return; }
+      if (data.error) throw new Error(data.error);
       let transcript = data.transcript ?? "";
       let segments: { t: number; text: string }[] = data.segments ?? [];
 
@@ -878,6 +1143,7 @@ export default function ConverterPage() {
       };
       setResult(convResult);
       setTab("transcript");
+      setAudioGenTrigger((t) => t + 1);
 
       // Save conversion
       if (user) {
@@ -887,7 +1153,6 @@ export default function ConverterPage() {
           video_id: videoId,
           video_url: `https://www.youtube.com/watch?v=${videoId}`,
           video_title: convResult.title,
-          title: convResult.title,
           language: language === "original" ? "original" : language,
           transcript_text: convResult.transcript,
         });
@@ -974,7 +1239,7 @@ export default function ConverterPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-4xl mx-auto px-4 py-5 md:py-8">
       <style>{`
         .scrollbar-thin::-webkit-scrollbar { width: 4px; }
         .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
@@ -983,20 +1248,20 @@ export default function ConverterPage() {
 
       {/* ── Header ── */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#f0f0f5] mb-1">Convert YouTube Video</h1>
-        <p className="text-sm text-[#606070]">Paste a YouTube URL to get transcript, summary, and audio</p>
+        <h1 className="text-2xl font-bold text-[var(--text)] mb-1">Convert YouTube Video</h1>
+        <p className="text-sm text-[var(--text3)]">Paste a YouTube URL to get transcript, summary, and audio</p>
       </div>
 
       {/* ── Input Card ── */}
-      <div className="rounded-2xl border p-6 mb-6" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+      <div className="rounded-2xl border p-4 md:p-6 mb-6" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
         {/* URL Input */}
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-[#606070]" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-[var(--text3)]" fill="currentColor" viewBox="0 0 24 24">
               <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z" />
             </svg>
-            <label className="text-xs font-medium text-[#a0a0b0] uppercase tracking-wider">YouTube URL</label>
-            <span className="text-[10px] text-[#606070] ml-auto">Paste multiple URLs or a playlist link</span>
+            <label className="text-xs font-medium text-[var(--text2)] uppercase tracking-wider">YouTube URL</label>
+            <span className="text-[10px] text-[var(--text3)] ml-auto">Paste multiple URLs or a playlist link</span>
           </div>
           <textarea
             value={url}
@@ -1004,23 +1269,23 @@ export default function ConverterPage() {
             onKeyDown={(e) => e.key === "Enter" && e.ctrlKey && !loading && handleConvert()}
             placeholder={"https://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=... (one per line)\nhttps://youtube.com/playlist?list=..."}
             rows={3}
-            className="w-full px-4 py-3 rounded-xl text-sm text-[#f0f0f5] placeholder-[#606070] border outline-none focus:border-[#8b5cf6] transition-colors resize-none"
-            style={{ background: "#0a0a0f", borderColor: "rgba(255,255,255,0.1)" }}
+            className="w-full px-4 py-3 rounded-xl text-sm text-[var(--text)] placeholder-[var(--text3)] border outline-none focus:border-[#8b5cf6] transition-colors resize-none"
+            style={{ background: "var(--bg)", borderColor: "var(--border)" }}
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
           {/* Mode selector */}
           <div>
-            <label className="block text-xs font-medium text-[#a0a0b0] mb-2 uppercase tracking-wider">Mode</label>
+            <label className="block text-xs font-medium text-[var(--text2)] mb-2 uppercase tracking-wider">Mode</label>
             <div className="flex gap-1.5">
               {modes.map((m) => (
                 <button
                   key={m.value}
                   onClick={() => setMode(m.value)}
                   title={m.desc}
-                  className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${mode === m.value ? "text-white" : "text-[#606070] hover:text-[#a0a0b0]"}`}
-                  style={mode === m.value ? { background: "#8b5cf6" } : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${mode === m.value ? "text-white" : "text-[var(--text3)] hover:text-[var(--text2)]"}`}
+                  style={mode === m.value ? { background: "#8b5cf6" } : { background: "var(--bg3)", border: "1px solid var(--border)" }}
                 >
                   {m.label}
                 </button>
@@ -1030,20 +1295,20 @@ export default function ConverterPage() {
 
           {/* Language selector */}
           <div>
-            <label className="block text-xs font-medium text-[#a0a0b0] mb-2 uppercase tracking-wider">Language</label>
+            <label className="block text-xs font-medium text-[var(--text2)] mb-2 uppercase tracking-wider">Language</label>
             <div className="relative">
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="w-full py-2.5 pl-3 pr-8 rounded-xl text-sm text-[#f0f0f5] border outline-none focus:border-[#8b5cf6] transition-colors appearance-none"
-                style={{ background: "#0a0a0f", borderColor: "rgba(255,255,255,0.1)" }}
+                className="w-full py-2.5 pl-3 pr-8 rounded-xl text-sm text-[var(--text)] border outline-none focus:border-[#8b5cf6] transition-colors appearance-none"
+                style={{ background: "var(--bg)", borderColor: "var(--border)" }}
               >
                 {LANGUAGES.map((l) => (
                   <option key={l.code} value={l.code}>{l.label}</option>
                 ))}
               </select>
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg className="w-4 h-4 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
@@ -1092,16 +1357,16 @@ export default function ConverterPage() {
 
       {/* ── Queue Display ── */}
       {queue.length > 0 && (
-        <div className="rounded-2xl border mb-6 overflow-hidden" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-          <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+        <div className="rounded-2xl border mb-6 overflow-hidden" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-[#f0f0f5]">Batch Queue</span>
+              <span className="text-sm font-semibold text-[var(--text)]">Batch Queue</span>
               <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
                 {queue.filter((q) => q.status === "done").length}/{queue.length}
               </span>
             </div>
             {!queueRunning && (
-              <button onClick={() => setQueue([])} className="text-xs text-[#606070] hover:text-[#a0a0b0] transition-colors">
+              <button onClick={() => setQueue([])} className="text-xs text-[var(--text3)] hover:text-[var(--text2)] transition-colors">
                 Clear
               </button>
             )}
@@ -1120,11 +1385,11 @@ export default function ConverterPage() {
                   className="w-14 h-9 object-cover rounded-lg flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[#f0f0f5] truncate">{item.title}</p>
-                  <p className="text-[10px] text-[#606070] mt-0.5 truncate">{item.videoId}</p>
+                  <p className="text-xs font-medium text-[var(--text)] truncate">{item.title}</p>
+                  <p className="text-[10px] text-[var(--text3)] mt-0.5 truncate">{item.videoId}</p>
                 </div>
                 <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
-                  {item.status === "pending" && <div className="w-2 h-2 rounded-full bg-[#606070]" />}
+                  {item.status === "pending" && <div className="w-2 h-2 rounded-full bg-[var(--text3)]" />}
                   {(item.status === "fetching" || item.status === "translating") && (
                     <div className="w-4 h-4 rounded-full border-2 border-[#8b5cf6] border-t-transparent animate-spin" />
                   )}
@@ -1152,15 +1417,19 @@ export default function ConverterPage() {
       {result && !loading && (
         <div className="space-y-5">
           {/* Video info */}
-          <div className="flex items-start gap-4 rounded-2xl border p-4" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-            <img
-              src={`https://img.youtube.com/vi/${result.videoId}/mqdefault.jpg`}
-              alt={result.title}
-              className="w-24 h-16 object-cover rounded-lg flex-shrink-0"
-            />
+          <div className="flex items-start gap-4 rounded-2xl border p-4" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+            <a href={`https://www.youtube.com/watch?v=${result.videoId}`} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+              <img
+                src={`https://img.youtube.com/vi/${result.videoId}/mqdefault.jpg`}
+                alt={result.title}
+                className="w-24 h-16 object-cover rounded-lg hover:opacity-80 transition-opacity"
+              />
+            </a>
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-[#f0f0f5] text-sm leading-snug mb-1 line-clamp-2">{result.title}</h2>
-              <p className="text-xs text-[#606070]">{result.author}</p>
+              <a href={`https://www.youtube.com/watch?v=${result.videoId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                <h2 className="font-semibold text-[var(--text)] text-sm leading-snug mb-1 line-clamp-2">{result.title}</h2>
+              </a>
+              <p className="text-xs text-[var(--text3)]">{result.author}</p>
               {selectedLang && language !== "original" && (
                 <span className="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
                   {selectedLang.flag} {selectedLang.label}
@@ -1178,23 +1447,25 @@ export default function ConverterPage() {
             langBcp47={selectedLang?.bcp47 ?? "en-US"}
             title={result.title}
             gender={profile?.settings?.voiceGender ?? "female"}
-            onProWall={() => setShowProWall(true)}
+            onProWall={() => openProWall("feature")}
             onSegmentChange={(idx) => {
               setActiveSegIdx(idx);
               setTimeout(() => activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
             }}
             seekToSegmentRef={seekToSegmentRef}
+            generateTrigger={audioGenTrigger}
+            cacheKey={result ? `audio_${result.videoId}_${language}` : undefined}
           />
 
           {/* Tabs */}
-          <div className="rounded-2xl border overflow-hidden" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl border overflow-hidden" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
             {/* Tab bar */}
-            <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            <div className="flex border-b" style={{ borderColor: "var(--border)" }}>
               {(["transcript", "summary", "chat"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`flex-1 py-3 text-sm font-medium capitalize transition-all duration-150 ${tab === t ? "text-[#a78bfa] border-b-2" : "text-[#606070] hover:text-[#a0a0b0]"}`}
+                  className={`flex-1 py-3 text-sm font-medium capitalize transition-all duration-150 ${tab === t ? "text-[#a78bfa] border-b-2" : "text-[var(--text3)] hover:text-[var(--text2)]"}`}
                   style={tab === t ? { borderBottomColor: "#8b5cf6" } : {}}
                 >
                   {t}
@@ -1204,9 +1475,9 @@ export default function ConverterPage() {
 
             {/* ── Transcript Tab ── */}
             {tab === "transcript" && (
-              <div className="p-5">
+              <div className="p-3 md:p-5">
                 {!realTimestamps && effectiveSegments.length > 0 && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg mb-3 text-[11px]" style={{ background: "rgba(255,255,255,0.04)", color: "#606070" }}>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg mb-3 text-[11px]" style={{ background: "var(--bg3)", color: "var(--text3)" }}>
                     <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -1215,7 +1486,7 @@ export default function ConverterPage() {
                 )}
                 <div
                   className="h-80 overflow-y-auto rounded-xl p-2 mb-4 scrollbar-thin"
-                  style={{ background: "#0a0a0f" }}
+                  style={{ background: "var(--bg)" }}
                 >
                   {effectiveSegments.length > 0
                     ? effectiveSegments.map((seg, i) => (
@@ -1228,14 +1499,14 @@ export default function ConverterPage() {
                           onSeek={() => seekToSegmentRef.current?.(i)}
                         />
                       ))
-                    : <p className="text-sm text-[#606070] p-3">No transcript available.</p>
+                    : <p className="text-sm text-[var(--text3)] p-3">No transcript available.</p>
                   }
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[#a0a0b0] border transition-all duration-150 hover:bg-white/5"
-                    style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                    style={{ borderColor: "var(--border)" }}
                   >
                     {copied ? (
                       <>
@@ -1255,8 +1526,8 @@ export default function ConverterPage() {
                   </button>
                   <button
                     onClick={handleDownload}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[#a0a0b0] border transition-all duration-150 hover:bg-white/5"
-                    style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                    style={{ borderColor: "var(--border)" }}
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -1269,15 +1540,15 @@ export default function ConverterPage() {
 
             {/* ── Summary Tab ── */}
             {tab === "summary" && (
-              <div className="p-5">
+              <div className="p-3 md:p-5">
                 {/* Summary type selector */}
                 <div className="flex gap-1.5 mb-4 flex-wrap">
                   {summaryTypes.map((st) => (
                     <button
                       key={st.value}
                       onClick={() => setSummaryType(st.value)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${summaryType === st.value ? "text-white" : "text-[#606070] hover:text-[#a0a0b0]"}`}
-                      style={summaryType === st.value ? { background: "#8b5cf6" } : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${summaryType === st.value ? "text-white" : "text-[var(--text3)] hover:text-[var(--text2)]"}`}
+                      style={summaryType === st.value ? { background: "#8b5cf6" } : { background: "var(--bg3)", border: "1px solid var(--border2)" }}
                     >
                       {st.label}
                     </button>
@@ -1295,13 +1566,13 @@ export default function ConverterPage() {
                 )}
 
                 <div
-                  className="h-72 overflow-y-auto rounded-xl p-4 text-sm text-[#a0a0b0] leading-relaxed whitespace-pre-wrap scrollbar-thin"
-                  style={{ background: "#0a0a0f" }}
+                  className="h-72 overflow-y-auto rounded-xl p-4 text-sm text-[var(--text2)] leading-relaxed whitespace-pre-wrap scrollbar-thin"
+                  style={{ background: "var(--bg)" }}
                 >
                   {summaryLoading && summaryType === "descriptive" ? (
                     <div className="flex flex-col items-center justify-center h-full gap-3">
                       <div className="w-6 h-6 rounded-full border-2 border-[#8b5cf6] border-t-transparent animate-spin" />
-                      <span className="text-xs text-[#606070]">Generating AI summary…</span>
+                      <span className="text-xs text-[var(--text3)]">Generating AI summary…</span>
                     </div>
                   ) : (
                     summaryText || "No content to summarize."
@@ -1312,7 +1583,7 @@ export default function ConverterPage() {
 
             {/* ── Chat Tab ── */}
             {tab === "chat" && (
-              <div className="p-5">
+              <div className="p-3 md:p-5">
                 {!isPro && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-xs" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#a78bfa" }}>
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
@@ -1335,8 +1606,8 @@ export default function ConverterPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                         </svg>
                       </div>
-                      <p className="text-sm text-[#606070]">Ask anything about this video</p>
-                      <p className="text-xs text-[#606070] mt-1 opacity-70">The AI uses the transcript to answer your questions</p>
+                      <p className="text-sm text-[var(--text3)]">Ask anything about this video</p>
+                      <p className="text-xs text-[var(--text3)] mt-1 opacity-70">The AI uses the transcript to answer your questions</p>
                     </div>
                   )}
                   {chatMessages.map((msg, i) => (
@@ -1349,8 +1620,8 @@ export default function ConverterPage() {
                         </div>
                       )}
                       <div
-                        className={`max-w-[75%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "text-white rounded-tr-sm" : "text-[#a0a0b0] rounded-tl-sm"}`}
-                        style={msg.role === "user" ? { background: "#8b5cf6" } : { background: "rgba(255,255,255,0.05)" }}
+                        className={`max-w-[75%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "text-white rounded-tr-sm" : "text-[var(--text2)] rounded-tl-sm"}`}
+                        style={msg.role === "user" ? { background: "#8b5cf6" } : { background: "var(--bg3)" }}
                       >
                         {msg.text}
                       </div>
@@ -1363,9 +1634,9 @@ export default function ConverterPage() {
                           <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18 2.5 2.5 0 0 0 10 15.5 2.5 2.5 0 0 0 7.5 13m9 0A2.5 2.5 0 0 0 14 15.5a2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5 2.5 2.5 0 0 0-2.5-2.5z" />
                         </svg>
                       </div>
-                      <div className="flex gap-1 px-3 py-2 rounded-2xl rounded-tl-sm" style={{ background: "rgba(255,255,255,0.05)" }}>
+                      <div className="flex gap-1 px-3 py-2 rounded-2xl rounded-tl-sm" style={{ background: "var(--bg3)" }}>
                         {[0, 1, 2].map((i) => (
-                          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#606070] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--text3)] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
                         ))}
                       </div>
                     </div>
@@ -1381,8 +1652,8 @@ export default function ConverterPage() {
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !chatLoading && handleChat()}
                     placeholder="Ask about this video..."
-                    className="flex-1 px-4 py-2.5 rounded-xl text-sm text-[#f0f0f5] placeholder-[#606070] border outline-none focus:border-[#8b5cf6] transition-colors"
-                    style={{ background: "#0a0a0f", borderColor: "rgba(255,255,255,0.1)" }}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm text-[var(--text)] placeholder-[var(--text3)] border outline-none focus:border-[#8b5cf6] transition-colors"
+                    style={{ background: "var(--bg)", borderColor: "var(--border)" }}
                   />
                   <button
                     onClick={handleChat}
@@ -1407,15 +1678,15 @@ export default function ConverterPage() {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowPlaylistModal(false)} />
           <div
             className="relative w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl border shadow-2xl flex flex-col"
-            style={{ background: "#111118", borderColor: "rgba(139,92,246,0.25)", maxHeight: "85vh" }}
+            style={{ background: "var(--bg2)", borderColor: "rgba(139,92,246,0.25)", maxHeight: "85vh" }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
               <div>
-                <h2 className="text-base font-bold text-[#f0f0f5]">Select Playlist Videos</h2>
-                <p className="text-xs text-[#606070] mt-0.5">{playlistVideos.length} videos found</p>
+                <h2 className="text-base font-bold text-[var(--text)]">Select Playlist Videos</h2>
+                <p className="text-xs text-[var(--text3)] mt-0.5">{playlistVideos.length} videos found</p>
               </div>
-              <button onClick={() => setShowPlaylistModal(false)} className="text-[#606070] hover:text-[#f0f0f5] transition-colors">
+              <button onClick={() => setShowPlaylistModal(false)} className="text-[var(--text3)] hover:text-[var(--text)] transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -1423,21 +1694,21 @@ export default function ConverterPage() {
             </div>
 
             {/* Select all / none */}
-            <div className="flex items-center gap-3 px-5 py-2.5 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center gap-3 px-5 py-2.5 border-b flex-shrink-0" style={{ borderColor: "var(--border2)" }}>
               <button
                 onClick={() => setPlaylistVideos((vs) => vs.map((v) => ({ ...v, selected: true })))}
                 className="text-xs font-medium text-[#a78bfa] hover:text-[#c084fc] transition-colors"
               >
                 Select All
               </button>
-              <span className="text-[#606070] text-xs">·</span>
+              <span className="text-[var(--text3)] text-xs">·</span>
               <button
                 onClick={() => setPlaylistVideos((vs) => vs.map((v) => ({ ...v, selected: false })))}
-                className="text-xs font-medium text-[#606070] hover:text-[#a0a0b0] transition-colors"
+                className="text-xs font-medium text-[var(--text3)] hover:text-[var(--text2)] transition-colors"
               >
                 Deselect All
               </button>
-              <span className="ml-auto text-xs text-[#606070]">
+              <span className="ml-auto text-xs text-[var(--text3)]">
                 {playlistVideos.filter((v) => v.selected).length} selected
               </span>
             </div>
@@ -1471,9 +1742,9 @@ export default function ConverterPage() {
                   />
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#f0f0f5] line-clamp-2 leading-snug">{video.title}</p>
+                    <p className="text-sm text-[var(--text)] line-clamp-2 leading-snug">{video.title}</p>
                     {video.duration && (
-                      <p className="text-[10px] text-[#606070] mt-1">{video.duration}</p>
+                      <p className="text-[10px] text-[var(--text3)] mt-1">{video.duration}</p>
                     )}
                   </div>
                 </button>
@@ -1481,11 +1752,11 @@ export default function ConverterPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            <div className="flex items-center gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: "var(--border)" }}>
               <button
                 onClick={() => setShowPlaylistModal(false)}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium text-[#a0a0b0] border transition-all duration-150 hover:bg-white/5"
-                style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                style={{ borderColor: "var(--border)" }}
               >
                 Cancel
               </button>
@@ -1503,7 +1774,7 @@ export default function ConverterPage() {
       )}
 
       {/* ── Pro Wall Modal ── */}
-      {showProWall && <ProWallModal onClose={() => setShowProWall(false)} />}
+      {showProWall && <ProWallModal onClose={() => setShowProWall(false)} reason={proWallReason} />}
     </div>
   );
 }

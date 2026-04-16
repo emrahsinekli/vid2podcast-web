@@ -9,7 +9,7 @@ import { LANGUAGES, POLAR_BUY_URL } from "@/lib/constants";
 interface Conversion {
   id: string;
   video_id: string;
-  title: string | null;
+  video_title: string | null;
   language: string | null;
   mode: string | null;
   created_at: string;
@@ -55,7 +55,7 @@ export default function HistoryPage() {
       const supabase = createClient();
       let query = supabase
         .from("conversions")
-        .select("id, video_id, title, language, mode, created_at")
+        .select("id, video_id, video_title, language, mode, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
@@ -105,7 +105,7 @@ export default function HistoryPage() {
   // Filter + search
   const filtered = useMemo(() => {
     return conversions.filter((c) => {
-      const matchesSearch = !search || (c.title ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = !search || (c.video_title ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesLang = langFilter === "all" || (c.language ?? "original") === langFilter;
       return matchesSearch && matchesLang;
     });
@@ -147,16 +147,16 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#f0f0f5] mb-1">History</h1>
-          <p className="text-sm text-[#606070]">
+          <h1 className="text-2xl font-bold text-[var(--text)] mb-1">History</h1>
+          <p className="text-sm text-[var(--text3)]">
             {isPro ? "Full history — all time" : `Last ${FREE_HISTORY_DAYS} days on Free plan`}
           </p>
         </div>
         {conversions.length > 0 && (
           <button
             onClick={() => setConfirmId("__all__")}
-            className="text-xs text-[#606070] hover:text-red-400 transition-colors px-3 py-1.5 rounded-lg border"
-            style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            className="text-xs text-[var(--text3)] hover:text-red-400 transition-colors px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: "var(--border)" }}
           >
             Clear all
           </button>
@@ -172,7 +172,7 @@ export default function HistoryPage() {
           <svg className="w-4 h-4 text-[#8b5cf6] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-[#a0a0b0]">
+          <p className="text-[var(--text2)]">
             Free plan shows last {FREE_HISTORY_DAYS} days only.{" "}
             <a href={POLAR_BUY_URL} target="_blank" rel="noopener noreferrer" className="font-semibold underline" style={{ color: "#8b5cf6" }}>
               Upgrade to Pro
@@ -190,9 +190,9 @@ export default function HistoryPage() {
             { label: "Top Language", value: topLang ? (getLangLabel(topLang[0]) ?? "Original") : "—" },
             { label: "This Week", value: conversions.filter((c) => Date.now() - new Date(c.created_at).getTime() < 7 * 86400000).length },
           ].map(({ label, value }) => (
-            <div key={label} className="rounded-2xl border p-4 text-center" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
-              <p className="text-xl font-bold text-[#f0f0f5]">{value}</p>
-              <p className="text-xs text-[#606070] mt-1">{label}</p>
+            <div key={label} className="rounded-2xl border p-4 text-center" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
+              <p className="text-xl font-bold text-[var(--text)]">{value}</p>
+              <p className="text-xs text-[var(--text3)] mt-1">{label}</p>
             </div>
           ))}
         </div>
@@ -202,23 +202,23 @@ export default function HistoryPage() {
       {!loading && totalConversions > 0 && (
         <div className="flex gap-3 mb-5">
           <div className="flex-1 relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#606070] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text3)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search by title…"
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm text-[#f0f0f5] placeholder-[#606070] border outline-none focus:border-[#8b5cf6] transition-colors"
-              style={{ background: "#111118", borderColor: "rgba(255,255,255,0.1)" }}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm text-[var(--text)] placeholder-[var(--text3)] border outline-none focus:border-[#8b5cf6] transition-colors"
+              style={{ background: "var(--bg2)", borderColor: "var(--border)" }}
             />
           </div>
           {usedLangs.length > 0 && (
             <select
               value={langFilter}
               onChange={(e) => { setLangFilter(e.target.value); setPage(1); }}
-              className="px-3 py-2.5 rounded-xl text-sm text-[#f0f0f5] border outline-none focus:border-[#8b5cf6] transition-colors appearance-none"
-              style={{ background: "#111118", borderColor: "rgba(255,255,255,0.1)" }}
+              className="px-3 py-2.5 rounded-xl text-sm text-[var(--text)] border outline-none focus:border-[#8b5cf6] transition-colors appearance-none"
+              style={{ background: "var(--bg2)", borderColor: "var(--border)" }}
             >
               <option value="all">All languages</option>
               {usedLangs.map((l) => (
@@ -233,24 +233,24 @@ export default function HistoryPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <div className="w-8 h-8 rounded-full border-2 border-[#8b5cf6] border-t-transparent animate-spin" />
-          <p className="text-sm text-[#606070]">Loading history…</p>
+          <p className="text-sm text-[var(--text3)]">Loading history…</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.06)" }}>
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(255,255,255,0.04)" }}>
-            <svg className="w-7 h-7 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border" style={{ background: "var(--bg2)", borderColor: "var(--border2)" }}>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: "var(--bg3)" }}>
+            <svg className="w-7 h-7 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           {search || langFilter !== "all" ? (
             <>
-              <p className="text-sm text-[#606070] mb-1">No results for your filters</p>
+              <p className="text-sm text-[var(--text3)] mb-1">No results for your filters</p>
               <button onClick={() => { setSearch(""); setLangFilter("all"); }} className="text-xs text-[#8b5cf6] hover:underline mt-2">Clear filters</button>
             </>
           ) : (
             <>
-              <p className="text-sm text-[#606070] mb-1">No conversions yet</p>
-              <p className="text-xs text-[#606070] opacity-60 mb-5">Convert a YouTube video to see it here</p>
+              <p className="text-sm text-[var(--text3)] mb-1">No conversions yet</p>
+              <p className="text-xs text-[var(--text3)] opacity-60 mb-5">Convert a YouTube video to see it here</p>
               <Link href="/app" className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: "#8b5cf6" }}>
                 Convert a Video
               </Link>
@@ -259,15 +259,15 @@ export default function HistoryPage() {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border overflow-hidden" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl border overflow-hidden" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
             {/* Header row */}
-            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider border-b" style={{ color: "#606070", borderColor: "rgba(255,255,255,0.06)" }}>
+            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider border-b" style={{ color: "var(--text3)", borderColor: "var(--border2)" }}>
               <span>Video</span>
               <span>Language</span>
               <span>Date</span>
               <span></span>
             </div>
-            <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+            <div className="divide-y" style={{ borderColor: "var(--border2)" }}>
               {paginated.map((conv) => (
                 <div key={conv.id} className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
                   {/* Thumbnail */}
@@ -279,18 +279,18 @@ export default function HistoryPage() {
                   />
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#f0f0f5] truncate leading-tight">
-                      {conv.title || "Untitled Video"}
+                    <p className="text-sm font-medium text-[var(--text)] truncate leading-tight">
+                      {conv.video_title || "Untitled Video"}
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-[#606070]">{relativeDate(conv.created_at)}</span>
+                      <span className="text-xs text-[var(--text3)]">{relativeDate(conv.created_at)}</span>
                       {conv.language && conv.language !== "original" && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
                           {getLangLabel(conv.language)}
                         </span>
                       )}
                       {conv.mode && conv.mode !== "full" && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "#606070" }}>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: "var(--bg3)", color: "var(--text3)" }}>
                           {conv.mode}
                         </span>
                       )}
@@ -330,15 +330,15 @@ export default function HistoryPage() {
             <div className="flex justify-center mt-5">
               <button
                 onClick={() => setPage((p) => p + 1)}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium text-[#a0a0b0] border transition-all hover:bg-white/5 hover:text-[#f0f0f5]"
-                style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium text-[var(--text2)] border transition-all hover:bg-white/5 hover:text-[var(--text)]"
+                style={{ borderColor: "var(--border)" }}
               >
                 Load more ({filtered.length - paginated.length} remaining)
               </button>
             </div>
           )}
 
-          <p className="text-center text-xs text-[#606070] mt-4">
+          <p className="text-center text-xs text-[var(--text3)] mt-4">
             Showing {paginated.length} of {filtered.length} conversions
           </p>
         </>
@@ -348,7 +348,7 @@ export default function HistoryPage() {
       {confirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setConfirmId(null)} />
-          <div className="relative w-full max-w-sm rounded-2xl border p-6 shadow-2xl" style={{ background: "#111118", borderColor: "rgba(239,68,68,0.3)" }}>
+          <div className="relative w-full max-w-sm rounded-2xl border p-6 shadow-2xl" style={{ background: "var(--bg2)", borderColor: "rgba(239,68,68,0.3)" }}>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(239,68,68,0.1)" }}>
                 <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -356,17 +356,17 @@ export default function HistoryPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-semibold text-[#f0f0f5]">
+                <p className="text-sm font-semibold text-[var(--text)]">
                   {confirmId === "__all__" ? "Clear all history?" : "Remove from history?"}
                 </p>
-                <p className="text-xs text-[#606070] mt-0.5">This action cannot be undone.</p>
+                <p className="text-xs text-[var(--text3)] mt-0.5">This action cannot be undone.</p>
               </div>
             </div>
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setConfirmId(null)}
-                className="flex-1 py-2 rounded-xl text-sm font-medium text-[#a0a0b0] border transition-all hover:bg-white/5"
-                style={{ borderColor: "rgba(255,255,255,0.1)" }}
+                className="flex-1 py-2 rounded-xl text-sm font-medium text-[var(--text2)] border transition-all hover:bg-white/5"
+                style={{ borderColor: "var(--border)" }}
               >
                 Cancel
               </button>

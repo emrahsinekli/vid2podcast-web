@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "latin-ext"] });
@@ -97,16 +98,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
       { url: "/logo48.png", type: "image/png", sizes: "48x48" },
       { url: "/logo128.png", type: "image/png", sizes: "128x128" },
       { url: "/logo.png", type: "image/png", sizes: "256x256" },
     ],
-    apple: [
-      { url: "/logo128.png", sizes: "128x128" },
-      { url: "/logo.png", sizes: "256x256" },
-    ],
-    shortcut: "/favicon.ico",
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+    shortcut: "/logo48.png",
   },
   manifest: "/manifest.json",
   // Add your Google Search Console token here:
@@ -195,7 +192,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ))}
       </head>
       <body className={inter.className}>
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
         <Analytics />
         <SpeedInsights />
       </body>
