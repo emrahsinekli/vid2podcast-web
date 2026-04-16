@@ -103,11 +103,15 @@ function AudioPlayer({
   isPro,
   langBcp47,
   onProWall,
+  onBoundary,
+  seekRef,
 }: {
   transcript: string;
   isPro: boolean;
   langBcp47: string;
   onProWall: () => void;
+  onBoundary?: (charIndex: number) => void;
+  seekRef?: React.MutableRefObject<((charIndex: number) => void) | null>;
 }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -115,6 +119,7 @@ function AudioPlayer({
   const [generating, setGenerating] = useState(false);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const offsetRef = useRef(0); // char offset when seeking
 
   useEffect(() => {
     synthRef.current = window.speechSynthesis;
@@ -123,24 +128,35 @@ function AudioPlayer({
     };
   }, []);
 
-  const handleGenerate = () => {
+  const startFrom = (charOffset: number) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
+    offsetRef.current = charOffset;
     setGenerating(true);
     setTimeout(() => {
-      const utter = new SpeechSynthesisUtterance(transcript.slice(0, 5000));
+      const text = transcript.slice(charOffset, charOffset + 5000);
+      const utter = new SpeechSynthesisUtterance(text);
       utter.rate = speed;
       if (langBcp47) utter.lang = langBcp47;
       utter.onstart = () => { setPlaying(true); setGenerating(false); };
-      utter.onend = () => { setPlaying(false); setProgress(100); };
+      utter.onend = () => { setPlaying(false); setProgress(100); onBoundary?.(transcript.length); };
       utter.onboundary = (e) => {
-        const pct = Math.min(100, Math.round((e.charIndex / transcript.length) * 100));
+        const absoluteChar = charOffset + e.charIndex;
+        const pct = Math.min(100, Math.round((absoluteChar / transcript.length) * 100));
         setProgress(pct);
+        onBoundary?.(absoluteChar);
       };
       utterRef.current = utter;
       synthRef.current!.speak(utter);
-    }, 300);
+    }, 100);
   };
+
+  // Expose seek function via ref
+  useEffect(() => {
+    if (seekRef) seekRef.current = startFrom;
+  });
+
+  const handleGenerate = () => startFrom(0);
 
   const handlePlayPause = () => {
     if (!synthRef.current) return;
@@ -286,6 +302,11 @@ export default function ConverterPage() {
 
   // Audio download menu
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+  // Transcript sync
+  const [currentCharIdx, setCurrentCharIdx] = useState(-1);
+  const seekRef = useRef<((charIndex: number) => void) | null>(null);
+  const activeLineRef = useRef<HTMLDivElement>(null);
 
   // Misc
   const [copied, setCopied] = useState(false);
@@ -888,6 +909,12 @@ export default function ConverterPage() {
             isPro={isPro}
             langBcp47={selectedLang?.bcp47 ?? ""}
             onProWall={() => setShowProWall(true)}
+            onBoundary={(idx) => {
+              setCurrentCharIdx(idx);
+              // Auto-scroll to active line
+              setTimeout(() => activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
+            }}
+            seekRef={seekRef}
           />
 
           {/* Tabs */}
@@ -910,10 +937,39 @@ export default function ConverterPage() {
             {tab === "transcript" && (
               <div className="p-5">
                 <div
-                  className="h-72 overflow-y-auto rounded-xl p-4 text-sm text-[#a0a0b0] leading-relaxed mb-4 scrollbar-thin"
+                  className="h-72 overflow-y-auto rounded-xl p-3 mb-4 scrollbar-thin space-y-0.5"
                   style={{ background: "#0a0a0f" }}
                 >
-                  {result.transcript || "No transcript available."}
+                  {result.transcript
+                    ? (() => {
+                        // Build sentence list with char offsets
+                        const sentences: { text: string; start: number }[] = [];
+                        let offset = 0;
+                        for (const seg of result.transcript.split(/(?<=[.!?。]\s+|\n)/)) {
+                          const trimmed = seg.trimEnd();
+                          if (trimmed) sentences.push({ text: trimmed, start: offset });
+                          offset += seg.length;
+                        }
+                        return sentences.map((s, i) => {
+                          const nextStart = sentences[i + 1]?.start ?? result.transcript.length;
+                          const isActive = currentCharIdx >= s.start && currentCharIdx < nextStart;
+                          return (
+                            <div
+                              key={i}
+                              ref={isActive ? activeLineRef : undefined}
+                              onClick={() => seekRef.current?.(s.start)}
+                              className="px-2.5 py-1.5 rounded-lg text-sm leading-relaxed cursor-pointer select-none transition-all duration-200"
+                              style={isActive
+                                ? { background: "rgba(139,92,246,0.18)", color: "#e2d9ff", borderLeft: "2px solid #8b5cf6" }
+                                : { color: "#a0a0b0", borderLeft: "2px solid transparent" }}
+                            >
+                              {s.text}
+                            </div>
+                          );
+                        });
+                      })()
+                    : <p className="text-sm text-[#606070] p-2">No transcript available.</p>
+                  }
                 </div>
                 <div className="flex gap-2">
                   <button
