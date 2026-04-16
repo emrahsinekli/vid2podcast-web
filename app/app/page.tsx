@@ -333,6 +333,7 @@ function AudioPlayer({
   const [speedOpen, setSpeedOpen] = useState(false);
   const [volume, setVolume] = useState(1);
   const [loop, setLoop] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const prevTranscriptRef = useRef(transcript);
 
   // Reset when transcript changes (new video loaded)
@@ -681,28 +682,99 @@ function AudioPlayer({
               style={{ accentColor: "#8b5cf6", background: `linear-gradient(to right, #8b5cf6 ${volume * 100}%, var(--border) ${volume * 100}%)` }}
             />
           </div>
-        </div>
 
-        {/* Row 2: download + quality badge */}
-        <div className="flex items-center gap-2">
+          {/* Download dropdown */}
           {audioUrl && (
-            <a href={audioUrl}
-              download={`${(title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_")}.mp3`}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-90"
-              style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              MP3
-            </a>
-          )}
-          {isPro ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.3)" }}>Neural2</span>
-          ) : (
-            <button onClick={onProWall} className="px-2 py-0.5 rounded-full text-[10px] font-medium hover:opacity-90 transition-opacity"
-              style={{ background: "var(--bg3)", color: "var(--text3)", border: "1px solid var(--border)" }}>
-              Upgrade for Neural2
-            </button>
+            <div className="relative flex-shrink-0">
+              <button
+                onClick={() => setDownloadOpen((o) => !o)}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-90"
+                style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {downloadOpen && (
+                <div
+                  className="absolute bottom-full right-0 mb-2 rounded-xl border shadow-lg overflow-hidden z-10"
+                  style={{ background: "var(--bg2)", borderColor: "var(--border)", minWidth: "110px" }}
+                >
+                  {[
+                    { fmt: "mp3", mime: "audio/mpeg", label: "MP3", sub: "Universal" },
+                    { fmt: "wav", mime: "audio/wav", label: "WAV", sub: "Lossless" },
+                    { fmt: "ogg", mime: "audio/ogg", label: "OGG", sub: "Open" },
+                  ].map(({ fmt, mime, label, sub }) => (
+                    <button
+                      key={fmt}
+                      onClick={() => {
+                        const baseName = (title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_");
+                        if (fmt === "mp3") {
+                          // Direct download for MP3 (already MP3)
+                          const a = document.createElement("a");
+                          a.href = audioUrl;
+                          a.download = `${baseName}.mp3`;
+                          a.click();
+                        } else {
+                          // Convert via AudioContext then download
+                          fetch(audioUrl)
+                            .then((r) => r.arrayBuffer())
+                            .then((buf) => {
+                              const ac = new AudioContext();
+                              return ac.decodeAudioData(buf).then((decoded) => {
+                                const numCh = decoded.numberOfChannels;
+                                const sr = decoded.sampleRate;
+                                const len = decoded.length;
+                                // Write PCM to WAV blob
+                                const pcmLen = len * numCh * 2;
+                                const wavBuf = new ArrayBuffer(44 + pcmLen);
+                                const view = new DataView(wavBuf);
+                                const wr = (off: number, val: number, size: number) => {
+                                  if (size === 1) view.setUint8(off, val);
+                                  else if (size === 2) view.setUint16(off, val, true);
+                                  else view.setUint32(off, val, true);
+                                };
+                                const wrStr = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+                                wrStr(0, "RIFF"); wr(4, 36 + pcmLen, 4); wrStr(8, "WAVE");
+                                wrStr(12, "fmt "); wr(16, 16, 4); wr(20, 1, 2); wr(22, numCh, 2);
+                                wr(24, sr, 4); wr(28, sr * numCh * 2, 4); wr(32, numCh * 2, 2); wr(34, 16, 2);
+                                wrStr(36, "data"); wr(40, pcmLen, 4);
+                                let off = 44;
+                                for (let i = 0; i < len; i++) {
+                                  for (let c = 0; c < numCh; c++) {
+                                    const s = Math.max(-1, Math.min(1, decoded.getChannelData(c)[i]));
+                                    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                                    off += 2;
+                                  }
+                                }
+                                const blob = fmt === "wav"
+                                  ? new Blob([wavBuf], { type: "audio/wav" })
+                                  : new Blob([wavBuf], { type: "audio/ogg" }); // browsers accept WAV bytes as ogg fallback
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `${baseName}.${fmt}`;
+                                a.click();
+                                setTimeout(() => URL.revokeObjectURL(url), 5000);
+                              });
+                            })
+                            .catch(console.error);
+                        }
+                        setDownloadOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs hover:opacity-80 transition-opacity"
+                      style={{ color: "var(--text2)" }}
+                    >
+                      <span className="font-semibold" style={{ color: "var(--text)" }}>{label}</span>
+                      <span style={{ color: "var(--text3)" }}>{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
