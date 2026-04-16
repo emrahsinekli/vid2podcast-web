@@ -703,75 +703,85 @@ function AudioPlayer({
                   className="absolute bottom-full right-0 mb-2 rounded-xl border shadow-lg overflow-hidden z-10"
                   style={{ background: "var(--bg2)", borderColor: "var(--border)", minWidth: "110px" }}
                 >
+                  {/* Download formats */}
                   {[
-                    { fmt: "mp3", mime: "audio/mpeg", label: "MP3", sub: "Universal" },
-                    { fmt: "wav", mime: "audio/wav", label: "WAV", sub: "Lossless" },
-                    { fmt: "ogg", mime: "audio/ogg", label: "OGG", sub: "Open" },
-                  ].map(({ fmt, mime, label, sub }) => (
+                    { fmt: "mp3", label: "MP3", sub: "Universal" },
+                    { fmt: "wav", label: "WAV", sub: "Lossless" },
+                    { fmt: "ogg", label: "OGG", sub: "Open" },
+                  ].map(({ fmt, label, sub }) => (
                     <button
                       key={fmt}
                       onClick={() => {
-                        const baseName = (title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_");
+                        const bn = (title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_");
                         if (fmt === "mp3") {
-                          // Direct download for MP3 (already MP3)
                           const a = document.createElement("a");
-                          a.href = audioUrl;
-                          a.download = `${baseName}.mp3`;
+                          a.href = audioUrl!;
+                          a.download = `${bn}.mp3`;
                           a.click();
                         } else {
-                          // Convert via AudioContext then download
-                          fetch(audioUrl)
+                          fetch(audioUrl!)
                             .then((r) => r.arrayBuffer())
                             .then((buf) => {
                               const ac = new AudioContext();
                               return ac.decodeAudioData(buf).then((decoded) => {
-                                const numCh = decoded.numberOfChannels;
-                                const sr = decoded.sampleRate;
-                                const len = decoded.length;
-                                // Write PCM to WAV blob
+                                const numCh = decoded.numberOfChannels, sr = decoded.sampleRate, len = decoded.length;
                                 const pcmLen = len * numCh * 2;
                                 const wavBuf = new ArrayBuffer(44 + pcmLen);
                                 const view = new DataView(wavBuf);
-                                const wr = (off: number, val: number, size: number) => {
-                                  if (size === 1) view.setUint8(off, val);
-                                  else if (size === 2) view.setUint16(off, val, true);
-                                  else view.setUint32(off, val, true);
-                                };
-                                const wrStr = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-                                wrStr(0, "RIFF"); wr(4, 36 + pcmLen, 4); wrStr(8, "WAVE");
-                                wrStr(12, "fmt "); wr(16, 16, 4); wr(20, 1, 2); wr(22, numCh, 2);
-                                wr(24, sr, 4); wr(28, sr * numCh * 2, 4); wr(32, numCh * 2, 2); wr(34, 16, 2);
-                                wrStr(36, "data"); wr(40, pcmLen, 4);
-                                let off = 44;
-                                for (let i = 0; i < len; i++) {
-                                  for (let c = 0; c < numCh; c++) {
-                                    const s = Math.max(-1, Math.min(1, decoded.getChannelData(c)[i]));
-                                    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-                                    off += 2;
-                                  }
-                                }
-                                const blob = fmt === "wav"
-                                  ? new Blob([wavBuf], { type: "audio/wav" })
-                                  : new Blob([wavBuf], { type: "audio/ogg" }); // browsers accept WAV bytes as ogg fallback
+                                const wr = (o: number, v: number, s: number) => { if (s===1) view.setUint8(o,v); else if (s===2) view.setUint16(o,v,true); else view.setUint32(o,v,true); };
+                                const wrStr = (o: number, s: string) => { for (let i=0;i<s.length;i++) view.setUint8(o+i,s.charCodeAt(i)); };
+                                wrStr(0,"RIFF"); wr(4,36+pcmLen,4); wrStr(8,"WAVE"); wrStr(12,"fmt "); wr(16,16,4); wr(20,1,2); wr(22,numCh,2);
+                                wr(24,sr,4); wr(28,sr*numCh*2,4); wr(32,numCh*2,2); wr(34,16,2); wrStr(36,"data"); wr(40,pcmLen,4);
+                                let o=44;
+                                for (let i=0;i<len;i++) for (let c=0;c<numCh;c++) { const sv=Math.max(-1,Math.min(1,decoded.getChannelData(c)[i])); view.setInt16(o,sv<0?sv*0x8000:sv*0x7FFF,true); o+=2; }
+                                const blob = new Blob([wavBuf], { type: fmt==="wav" ? "audio/wav" : "audio/ogg" });
                                 const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                a.download = `${baseName}.${fmt}`;
-                                a.click();
+                                const a = document.createElement("a"); a.href=url; a.download=`${bn}.${fmt}`; a.click();
                                 setTimeout(() => URL.revokeObjectURL(url), 5000);
                               });
-                            })
-                            .catch(console.error);
+                            }).catch(console.error);
                         }
                         setDownloadOpen(false);
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2 text-xs hover:opacity-80 transition-opacity"
-                      style={{ color: "var(--text2)" }}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs hover:opacity-80 transition-opacity border-b"
+                      style={{ color: "var(--text2)", borderColor: "var(--border)" }}
                     >
                       <span className="font-semibold" style={{ color: "var(--text)" }}>{label}</span>
                       <span style={{ color: "var(--text3)" }}>{sub}</span>
                     </button>
                   ))}
+                  {/* Share audio */}
+                  <button
+                    onClick={async () => {
+                      setDownloadOpen(false);
+                      if (!audioUrl) return;
+                      const bn = (title || "podcast").slice(0, 40).replace(/[^a-z0-9]/gi, "_");
+                      if (navigator.share && navigator.canShare) {
+                        try {
+                          const res = await fetch(audioUrl);
+                          const blob = await res.blob();
+                          const file = new File([blob], `${bn}.mp3`, { type: "audio/mpeg" });
+                          if (navigator.canShare({ files: [file] })) {
+                            await navigator.share({ title: title || "Podcast Audio", files: [file] });
+                            return;
+                          }
+                        } catch (_) {}
+                      }
+                      // Fallback: share URL
+                      if (navigator.share) {
+                        navigator.share({ title: title || "Podcast Audio", url: window.location.href }).catch(() => {});
+                      } else {
+                        navigator.clipboard.writeText(window.location.href);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs hover:opacity-80 transition-opacity"
+                    style={{ color: "#a78bfa" }}
+                  >
+                    <span className="font-semibold">Share</span>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                  </button>
                 </div>
               )}
             </div>
@@ -1256,14 +1266,92 @@ export default function ConverterPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const baseName = (t: string) => t.slice(0, 40).replace(/[^a-z0-9]/gi, "_");
+
   const handleDownload = () => {
     if (!result) return;
     const blob = new Blob([result.transcript], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${result.title.slice(0, 40).replace(/[^a-z0-9]/gi, "_")}_transcript.txt`;
+    a.download = `${baseName(result.title)}_transcript.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
+  };
+
+  const handleDownloadPdf = () => {
+    if (!result) return;
+    const lines = result.transcript.split("\n");
+    const pageWidth = 595, margin = 50, lineHeight = 14, fontSize = 10;
+    const usable = pageWidth - margin * 2;
+    const charsPerLine = Math.floor(usable / (fontSize * 0.5));
+    const wrappedLines: string[] = [];
+    for (const line of lines) {
+      if (!line.trim()) { wrappedLines.push(""); continue; }
+      let remaining = line;
+      while (remaining.length > charsPerLine) {
+        const cut = remaining.lastIndexOf(" ", charsPerLine) || charsPerLine;
+        wrappedLines.push(remaining.slice(0, cut));
+        remaining = remaining.slice(cut + 1);
+      }
+      wrappedLines.push(remaining);
+    }
+    const pageHeight = 842, contentHeight = pageHeight - margin * 2;
+    const linesPerPage = Math.floor(contentHeight / lineHeight);
+    const pages: string[][] = [];
+    for (let i = 0; i < wrappedLines.length; i += linesPerPage) pages.push(wrappedLines.slice(i, i + linesPerPage));
+    if (!pages.length) pages.push([]);
+
+    const escPdf = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    let pdf = `%PDF-1.4\n`;
+    const objs: string[] = ["", ""];
+    // page tree
+    objs[1] = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
+    const pageIds = pages.map((_, i) => `${4 + i * 2} 0 R`).join(" ");
+    objs[2] = `2 0 obj\n<< /Type /Pages /Kids [${pageIds}] /Count ${pages.length} >>\nendobj\n`;
+    objs[3] = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`;
+    for (let p = 0; p < pages.length; p++) {
+      const contentObjId = 5 + p * 2;
+      const streamLines = pages[p].map((l, li) =>
+        `BT /F1 ${fontSize} Tf ${margin} ${pageHeight - margin - li * lineHeight} Td (${escPdf(l)}) Tj ET`
+      ).join("\n");
+      const stream = streamLines || "BT ET";
+      objs[4 + p * 2] = `${4 + p * 2} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 3 0 R >> >> >>\nendobj\n`;
+      objs[5 + p * 2] = `${contentObjId} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`;
+    }
+    let body = "";
+    const offsets: number[] = [];
+    const pdfHeader = pdf;
+    body += pdfHeader;
+    for (let i = 1; i < objs.length; i++) {
+      if (!objs[i]) continue;
+      offsets[i] = body.length;
+      body += objs[i];
+    }
+    const xrefOffset = body.length;
+    const objCount = objs.length;
+    body += `xref\n0 ${objCount}\n0000000000 65535 f \n`;
+    for (let i = 1; i < objCount; i++) body += `${String(offsets[i] ?? 0).padStart(10, "0")} 00000 n \n`;
+    body += `trailer\n<< /Size ${objCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    const blob = new Blob([body], { type: "application/pdf" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${baseName(result.title)}_transcript.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleShareTranscript = async () => {
+    if (!result) return;
+    const text = `${result.title}\n\n${result.transcript}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: result.title, text });
+        return;
+      } catch (_) { /* fall through to clipboard */ }
+    }
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleChat = async () => {
@@ -1587,37 +1675,45 @@ export default function ConverterPage() {
                     : <p className="text-sm text-[var(--text3)] p-3">No transcript available.</p>
                   }
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  {/* Copy */}
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
                     style={{ borderColor: "var(--border)" }}
                   >
                     {copied ? (
-                      <>
-                        <svg className="w-4 h-4 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Copied!
-                      </>
+                      <><svg className="w-3.5 h-3.5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Copied!</>
                     ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                        Copy
-                      </>
+                      <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy</>
                     )}
                   </button>
+                  {/* TXT */}
                   <button
                     onClick={handleDownload}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                     .TXT
+                  </button>
+                  {/* PDF */}
+                  <button
+                    onClick={handleDownloadPdf}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    .PDF
+                  </button>
+                  {/* Share */}
+                  <button
+                    onClick={handleShareTranscript}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 hover:opacity-90"
+                    style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.25)" }}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                    Share
                   </button>
                 </div>
               </div>
