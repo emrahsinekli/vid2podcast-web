@@ -337,10 +337,13 @@ function AudioPlayer({
     setGenProgress(0);
   }, [transcript]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-generate audio when triggered from history (check IDB cache first)
+  // Auto-generate audio when triggered (convert button or history open)
   useEffect(() => {
-    if (!generateTrigger || audioUrl || generating) return;
-    const run = async () => {
+    if (!generateTrigger || !transcript || generating) return;
+    // Small delay to let React flush state (transcript + trigger set in same batch)
+    const t = setTimeout(async () => {
+      // If audio already loaded for this transcript, skip
+      if (audioRef.current?.src && audioRef.current.src !== window.location.href) return;
       // Check IDB cache first
       if (cacheKey) {
         const cached = await idbGet(cacheKey);
@@ -362,10 +365,10 @@ function AudioPlayer({
           audioRef.current.load();
         }
       }).catch(console.error);
-    };
-    run();
+    }, 100);
+    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generateTrigger]);
+  }, [generateTrigger, transcript]);
 
   const generateAudio = async (): Promise<string> => {
     setGenerating(true);
