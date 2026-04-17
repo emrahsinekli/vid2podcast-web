@@ -8,6 +8,39 @@ export interface FileUploadProps {
   disabled?: boolean;
 }
 
+// Decode audio file → 16kHz mono Float32Array on the main thread
+async function decodeAudioFile(file: File, onProgress: (msg: string) => void): Promise<Float32Array> {
+  onProgress("Reading audio from file...");
+  const arrayBuffer = await file.arrayBuffer();
+  onProgress("Decoding audio...");
+  const audioCtx = new AudioContext({ sampleRate: 16000 });
+  try {
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    const numChannels = decoded.numberOfChannels;
+    const length = decoded.length;
+    const mono = new Float32Array(length);
+    for (let ch = 0; ch < numChannels; ch++) {
+      const ch_data = decoded.getChannelData(ch);
+      for (let i = 0; i < length; i++) mono[i] += ch_data[i] / numChannels;
+    }
+    return mono;
+  } finally {
+    await audioCtx.close();
+  }
+}
+
+let workerInstance: Worker | null = null;
+
+function getWorker(): Worker {
+  if (!workerInstance) {
+    workerInstance = new Worker(
+      new URL("../lib/whisper-worker", import.meta.url),
+      { type: "module" }
+    );
+  }
+  return workerInstance;
+}
+
 export default function FileUpload({ onTranscript, disabled }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -23,13 +56,35 @@ export default function FileUpload({ onTranscript, disabled }: FileUploadProps) 
     setProgress("Starting...");
 
     try {
-      // Dynamic import — only loads when needed
-      const { transcribeFile } = await import("@/lib/whisper");
-      const text = await transcribeFile(file, (msg, _pct) => setProgress(msg));
-      if (!text) throw new Error("Could not extract speech from this file.");
-      const title = file.name.replace(/\.[^.]+$/, "");
-      setPhase("done");
-      onTranscript(text, title);
+      // Step 1: decode audio on main thread (fast, non-blocking UI)
+      const audio = await decodeAudioFile(file, setProgress);
+
+      // Step 2: send Float32Array to Web Worker — inference runs off main thread
+      const worker = getWorker();
+
+      await new Promise<void>((resolve, reject) => {
+        worker.onmessage = (e) => {
+          const { type, msg, text, message } = e.data;
+          if (type === "progress") {
+            setProgress(msg);
+          } else if (type === "done") {
+            if (!text) {
+              reject(new Error("Could not extract speech from this file."));
+            } else {
+              const title = file.name.replace(/\.[^.]+$/, "");
+              setPhase("done");
+              onTranscript(text, title);
+              resolve();
+            }
+          } else if (type === "error") {
+            reject(new Error(message || "Transcription failed."));
+          }
+        };
+        worker.onerror = (e) => reject(new Error(e.message || "Worker error"));
+
+        // Transfer buffer ownership — zero-copy
+        worker.postMessage({ audio }, [audio.buffer]);
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Transcription failed. Please try again.");
       setPhase("error");
@@ -106,7 +161,6 @@ export default function FileUpload({ onTranscript, disabled }: FileUploadProps) 
         onDrop={onDrop}
       >
         <input ref={inputRef} type="file" accept={ACCEPTED_EXT} className="hidden" onChange={onInputChange} disabled={disabled} />
-
         <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--bg3)" }}>
           <svg className="w-5 h-5 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -117,7 +171,7 @@ export default function FileUpload({ onTranscript, disabled }: FileUploadProps) 
           <p className="text-xs text-[var(--text3)] mt-1">MP3, WAV, MP4, M4A, MOV, MKV, OGG — any size</p>
           <p className="text-xs mt-1" style={{ color: "#a78bfa" }}>Powered by Whisper AI — runs in your browser, 100% private</p>
         </div>
-        <div className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#a78bfa] transition-colors" style={{ background: "rgba(139,92,246,0.12)" }}>
+        <div className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#a78bfa]" style={{ background: "rgba(139,92,246,0.12)" }}>
           Browse Files
         </div>
       </div>
