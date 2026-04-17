@@ -8,27 +8,6 @@ export interface FileUploadProps {
   disabled?: boolean;
 }
 
-// Decode audio file → 16kHz mono Float32Array on the main thread
-async function decodeAudioFile(file: File, onProgress: (msg: string) => void): Promise<Float32Array> {
-  onProgress("Reading audio from file...");
-  const arrayBuffer = await file.arrayBuffer();
-  onProgress("Decoding audio...");
-  const audioCtx = new AudioContext({ sampleRate: 16000 });
-  try {
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-    const numChannels = decoded.numberOfChannels;
-    const length = decoded.length;
-    const mono = new Float32Array(length);
-    for (let ch = 0; ch < numChannels; ch++) {
-      const ch_data = decoded.getChannelData(ch);
-      for (let i = 0; i < length; i++) mono[i] += ch_data[i] / numChannels;
-    }
-    return mono;
-  } finally {
-    await audioCtx.close();
-  }
-}
-
 let workerInstance: Worker | null = null;
 
 function getWorker(): Worker {
@@ -56,10 +35,7 @@ export default function FileUpload({ onTranscript, disabled }: FileUploadProps) 
     setProgress("Starting...");
 
     try {
-      // Step 1: decode audio on main thread (fast, non-blocking UI)
-      const audio = await decodeAudioFile(file, setProgress);
-
-      // Step 2: send Float32Array to Web Worker — inference runs off main thread
+      // Send File directly to worker — all heavy work (decode + inference) runs off main thread
       const worker = getWorker();
 
       await new Promise<void>((resolve, reject) => {
@@ -82,8 +58,8 @@ export default function FileUpload({ onTranscript, disabled }: FileUploadProps) 
         };
         worker.onerror = (e) => reject(new Error(e.message || "Worker error"));
 
-        // Transfer buffer ownership — zero-copy
-        worker.postMessage({ audio }, [audio.buffer]);
+        // Pass File object to worker — decode + inference all in worker
+        worker.postMessage({ file });
       });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Transcription failed. Please try again.");
