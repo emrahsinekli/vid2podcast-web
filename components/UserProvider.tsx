@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createClient } from "@/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { MAX_FREE_CREDITS, SIGNUP_CREDITS } from "@/lib/constants";
 
 export interface UserProfile {
   id: string;
@@ -10,6 +11,8 @@ export interface UserProfile {
   plan: "free" | "pro";
   isTrial?: boolean;
   trialEndsAt?: string | null;
+  credits: number;
+  creditsLastRefill: string;
   settings: {
     defaultLanguage: string;
     voiceGender: "female" | "male";
@@ -25,6 +28,7 @@ interface UserCtx {
   isPro: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  spendCredit: () => Promise<void>;
 }
 
 const Ctx = createContext<UserCtx | null>(null);
@@ -63,13 +67,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     fetchingRef.current = true;
     try {
       const email = u.email ?? "";
+      const today = new Date().toISOString().slice(0, 10);
 
       const { data, error } = await supabase.from("users").select("*").eq("id", u.id).single();
       if (error || !data) {
-        await supabase.from("users").upsert({ id: u.id, email: email.toLowerCase(), plan: "free" });
-        setProfile({ id: u.id, email, plan: "free", settings: { defaultLanguage: "original", voiceGender: "female", voiceName: null } });
+        // New user — give SIGNUP_CREDITS
+        await supabase.from("users").upsert({
+          id: u.id,
+          email: email.toLowerCase(),
+          plan: "free",
+          credits: SIGNUP_CREDITS,
+          credits_last_refill: today,
+        });
+        setProfile({
+          id: u.id, email, plan: "free",
+          credits: SIGNUP_CREDITS, creditsLastRefill: today,
+          settings: { defaultLanguage: "original", voiceGender: "female", voiceName: null },
+        });
       } else {
-        setProfile(data);
+        // Existing user — check daily refill
+        let credits = data.credits ?? SIGNUP_CREDITS;
+        let creditsLastRefill = data.credits_last_refill ?? today;
+
+        if (creditsLastRefill < today && data.plan !== "pro") {
+          credits = Math.min(credits + 1, MAX_FREE_CREDITS);
+          creditsLastRefill = today;
+          // best-effort update
+          supabase.from("users").update({ credits, credits_last_refill: creditsLastRefill }).eq("id", u.id).then(() => {});
+        }
+
+        setProfile({ ...data, credits, creditsLastRefill });
       }
 
       // Sync plan from subscribers table (one-time, not polling)
@@ -111,8 +138,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     window.location.href = "/";
   }
 
+  const spendCredit = useCallback(async () => {
+    if (!user || !profile) return;
+    const newCredits = Math.max(0, profile.credits - 1);
+    setProfile((prev) => prev ? { ...prev, credits: newCredits } : prev);
+    try {
+      await supabase.from("users").update({ credits: newCredits }).eq("id", user.id);
+    } catch (_) { /* best-effort */ }
+  }, [user, profile]);
+
   return (
-    <Ctx.Provider value={{ user, profile, setProfile, loading, isPro, signIn, signOut }}>
+    <Ctx.Provider value={{ user, profile, setProfile, loading, isPro, signIn, signOut, spendCredit }}>
       {children}
     </Ctx.Provider>
   );

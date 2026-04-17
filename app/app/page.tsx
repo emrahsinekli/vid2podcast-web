@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES, POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
+import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES, POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
 import { summarize, SummaryType } from "@/lib/summary";
 import { freeAISummarize, freeAIAnswer, canUseAI } from "@/lib/free-ai";
 import { extractVideoId, extractPlaylistId, parseInputUrls } from "@/lib/utils";
 import { useUser } from "@/components/UserProvider";
 import { createClient } from "@/supabase/client";
+import FileUpload from "@/components/FileUpload";
 
 // ─── IndexedDB Audio Cache ───────────────────────────────────────────────────
 const IDB_NAME = "v2p_audio";
@@ -113,9 +114,9 @@ function ProWallModal({ onClose, reason }: { onClose: () => void; reason?: "limi
           <div className="text-center mb-5">
             {reason === "limit" ? (
               <>
-                <div className="text-3xl mb-2">🚀</div>
-                <h2 className="text-xl font-bold text-[var(--text)] mb-1">You've hit today's limit</h2>
-                <p className="text-sm text-[var(--text2)]">Free plan: <strong>1 conversion/day</strong>. Upgrade to convert unlimited videos.</p>
+                <div className="text-3xl mb-2">⏳</div>
+                <h2 className="text-xl font-bold text-[var(--text)] mb-1">No credits left</h2>
+                <p className="text-sm text-[var(--text2)]">You get <strong>+1 free credit every day</strong>. Come back tomorrow, or upgrade to Pro for unlimited conversions.</p>
               </>
             ) : (
               <>
@@ -887,7 +888,7 @@ function TranscriptSegmentRow({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ConverterPage() {
-  const { user, profile, isPro } = useUser();
+  const { user, profile, isPro, spendCredit } = useUser();
 
   // Input state
   const [url, setUrl] = useState(() => {
@@ -948,6 +949,9 @@ export default function ConverterPage() {
   // Misc
   const [copied, setCopied] = useState(false);
   const [audioGenTrigger, setAudioGenTrigger] = useState(0);
+
+  // Input tab
+  const [inputTab, setInputTab] = useState<"youtube" | "upload">("youtube");
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1012,20 +1016,30 @@ export default function ConverterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // AI summary via Groq (free, full transcript)
+  // AI summary — Desktop: Gemini Nano, Mobile: Groq API, Fallback: extractive
   useEffect(() => {
     if (!result) { setAiSummary(""); return; }
     setSummaryLoading(true);
-    fetch(`${BACKEND_URL}/api/ai`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
-      body: JSON.stringify({ type: "summary", transcript: result.transcript, wordCount: 300 }),
-    })
-      .then((r) => r.ok ? r.json() : Promise.reject())
-      .then((d) => setAiSummary(d.result ?? ""))
-      .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
-      .finally(() => setSummaryLoading(false));
-  }, [result?.videoId]);
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
+    if (isMobile) {
+      // Mobile: use Groq API
+      fetch(`${BACKEND_URL}/api/ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
+        body: JSON.stringify({ type: "summary", transcript: result.transcript, wordCount: 300 }),
+      })
+        .then((r) => r.ok ? r.json() : Promise.reject())
+        .then((d) => setAiSummary(d.result ?? ""))
+        .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
+        .finally(() => setSummaryLoading(false));
+    } else {
+      // Desktop: Gemini Nano → extractive fallback
+      freeAISummarize(result.transcript, { wordCount: 300, isPro: true })
+        .then((s) => setAiSummary(s))
+        .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
+        .finally(() => setSummaryLoading(false));
+    }
+  }, [result?.videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getToken = async () => {
     const supabase = createClient();
@@ -1165,17 +1179,10 @@ export default function ConverterPage() {
       return;
     }
 
-    // Free limit check
-    if (!isPro) {
-      const supabase = createClient();
-      const today = new Date().toISOString().split("T")[0];
-      const { count } = await supabase
-        .from("conversions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user?.id ?? "")
-        .gte("created_at", today);
-
-      if ((count ?? 0) >= FREE_LIMIT) {
+    // Credits-based free limit check
+    if (!isPro && user) {
+      const credits = profile?.credits ?? 0;
+      if (credits <= 0) {
         openProWall("limit");
         return;
       }
@@ -1239,6 +1246,11 @@ export default function ConverterPage() {
       setResult(convResult);
       setTab("transcript");
       setAudioGenTrigger((t) => t + 1);
+
+      // Spend 1 credit for free users
+      if (!isPro && user) {
+        void spendCredit();
+      }
 
       // Save conversion
       if (user) {
@@ -1363,15 +1375,23 @@ export default function ConverterPage() {
     setChatLoading(true);
 
     try {
-      // Groq — free for everyone, full transcript, no limit enforced
-      const res = await fetch(`${BACKEND_URL}/api/ai`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
-        body: JSON.stringify({ type: "chat", transcript: result.transcript, question }),
-      });
-      if (!res.ok) throw new Error("AI request failed");
-      const data = await res.json();
-      setChatMessages((prev) => [...prev, { role: "assistant", text: data.result ?? "I could not find an answer." }]);
+      const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
+      let answer = "";
+      if (mobile) {
+        // Mobile: Groq API
+        const res = await fetch(`${BACKEND_URL}/api/ai`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
+          body: JSON.stringify({ type: "chat", transcript: result.transcript, question }),
+        });
+        if (!res.ok) throw new Error("AI request failed");
+        const data = await res.json();
+        answer = data.result ?? "I could not find an answer.";
+      } else {
+        // Desktop: Gemini Nano → keyword fallback
+        answer = await freeAIAnswer(result.transcript, question, true);
+      }
+      setChatMessages((prev) => [...prev, { role: "assistant", text: answer }]);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Sorry, I encountered an error. Please try again.";
       setChatMessages((prev) => [...prev, { role: "assistant", text: msg }]);
@@ -1421,31 +1441,70 @@ export default function ConverterPage() {
 
       {/* ── Header ── */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--text)] mb-1">Convert YouTube Video</h1>
-        <p className="text-sm text-[var(--text3)]">Paste a YouTube URL to get transcript, summary, and audio</p>
+        <h1 className="text-2xl font-bold text-[var(--text)] mb-1">Convert to Podcast</h1>
+        <p className="text-sm text-[var(--text3)]">Paste a YouTube URL or upload your own audio/video file</p>
       </div>
 
       {/* ── Input Card ── */}
       <div className="rounded-2xl border p-4 md:p-6 mb-6" style={{ background: "var(--bg2)", borderColor: "var(--border)" }}>
-        {/* URL Input */}
-        <div className="mb-5">
-          <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-[var(--text3)]" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z" />
-            </svg>
-            <label className="text-xs font-medium text-[var(--text2)] uppercase tracking-wider">YouTube URL</label>
-            <span className="text-[10px] text-[var(--text3)] ml-auto">Paste multiple URLs or a playlist link</span>
-          </div>
-          <textarea
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && e.ctrlKey && !loading && handleConvert()}
-            placeholder={"https://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=... (one per line)\nhttps://youtube.com/playlist?list=..."}
-            rows={3}
-            className="w-full px-4 py-3 rounded-xl text-sm text-[var(--text)] placeholder-[var(--text3)] border outline-none focus:border-[#8b5cf6] transition-colors resize-none"
-            style={{ background: "var(--bg)", borderColor: "var(--border)" }}
-          />
+        {/* Input tabs */}
+        <div className="flex gap-1.5 mb-5 p-1 rounded-xl" style={{ background: "var(--bg3)" }}>
+          {[
+            { id: "youtube" as const, label: "YouTube URL", icon: <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z" /> },
+            { id: "upload" as const, label: "Upload File", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /> },
+          ].map(({ id, label, icon }) => (
+            <button
+              key={id}
+              onClick={() => setInputTab(id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all duration-150 ${inputTab === id ? "text-white shadow-sm" : "text-[var(--text3)] hover:text-[var(--text2)]"}`}
+              style={inputTab === id ? { background: "#8b5cf6" } : {}}
+            >
+              <svg className="w-3.5 h-3.5" fill={id === "youtube" ? "currentColor" : "none"} viewBox="0 0 24 24" stroke={id === "upload" ? "currentColor" : "none"}>{icon}</svg>
+              {label}
+            </button>
+          ))}
         </div>
+
+        {/* YouTube URL Input */}
+        {inputTab === "youtube" && (
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <label className="text-xs font-medium text-[var(--text2)] uppercase tracking-wider">YouTube URL</label>
+              <span className="text-[10px] text-[var(--text3)] ml-auto">Multiple URLs or playlist supported</span>
+            </div>
+            <textarea
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && e.ctrlKey && !loading && handleConvert()}
+              placeholder={"https://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=... (one per line)\nhttps://youtube.com/playlist?list=..."}
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl text-sm text-[var(--text)] placeholder-[var(--text3)] border outline-none focus:border-[#8b5cf6] transition-colors resize-none"
+              style={{ background: "var(--bg)", borderColor: "var(--border)" }}
+            />
+          </div>
+        )}
+
+        {/* File Upload Input */}
+        {inputTab === "upload" && (
+          <div className="mb-5">
+            <FileUpload
+              onTranscript={(text, title) => {
+                const convResult: ConversionResult = {
+                  videoId: "upload_" + Date.now(),
+                  title,
+                  author: "Uploaded File",
+                  transcript: text,
+                  segments: [],
+                };
+                setResult(convResult);
+                setTab("transcript");
+                setAudioGenTrigger((t) => t + 1);
+              }}
+              disabled={loading}
+            />
+          </div>
+        )}
+
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
           {/* Mode selector */}
@@ -1499,30 +1558,42 @@ export default function ConverterPage() {
           </div>
         )}
 
-        {/* Convert Button */}
-        <button
-          onClick={handleConvert}
-          disabled={loading || playlistLoading || queueRunning || !url.trim()}
-          className="w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}
-        >
-          {(loading || playlistLoading || queueRunning) ? (
-            <>
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              {playlistLoading ? "Loading Playlist..." : queueRunning ? "Processing Queue..." : "Processing..."}
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Convert to Podcast
-            </>
-          )}
-        </button>
+        {/* Convert Button — only shown for YouTube tab (upload tab handles itself) */}
+        {inputTab === "youtube" && (
+          <>
+            <button
+              onClick={handleConvert}
+              disabled={loading || playlistLoading || queueRunning || !url.trim()}
+              className="w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}
+            >
+              {(loading || playlistLoading || queueRunning) ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  {playlistLoading ? "Loading Playlist..." : queueRunning ? "Processing Queue..." : "Processing..."}
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Convert to Podcast
+                </>
+              )}
+            </button>
+            {/* Credits badge — shown for free logged-in users */}
+            {user && !isPro && (
+              <p className="text-center text-[11px] mt-1.5" style={{ color: (profile?.credits ?? 0) <= 1 ? "#f59e0b" : "var(--text3)" }}>
+                {(profile?.credits ?? 0) > 0
+                  ? `${profile?.credits ?? 0} credit${(profile?.credits ?? 0) !== 1 ? "s" : ""} remaining · +1 every day`
+                  : "No credits left · +1 tomorrow or upgrade to Pro"}
+              </p>
+            )}
+          </>
+        )}
       </div>
 
       {/* ── Playlist Loading ── */}

@@ -36,6 +36,10 @@ export const LANGUAGES = [
 export const FREE_LIMIT = 1;
 export const FREE_CHAT_LIMIT = 2;
 export const FREE_SUMMARY_WORDS = 80;
+export const SIGNUP_CREDITS = 5;
+export const DAILY_REFILL_CREDITS = 1;
+export const MAX_FREE_CREDITS = 5;
+export const GUEST_MAX_TRANSCRIPT_WORDS = 600;
 const SITE_URL = "https://vid2podcast.com";
 
 // Single checkout page — shows all 3 plans (Monthly / Yearly / Lifetime)
@@ -51,3 +55,5 @@ export const POLAR_MONTHLY_URL = POLAR_BUY_URL;   // TODO: replace with monthly 
 export const POLAR_YEARLY_URL  = POLAR_BUY_URL;   // TODO: replace with yearly product price URL
 export const POLAR_LIFETIME_URL = POLAR_BUY_URL;  // TODO: replace with lifetime product price URL
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://vid2podcast-backend.vercel.app";
+export const GUEST_TOKEN = "v2p-guest-2024-zM5kT8wN";
+export const WEB_TOKEN = "v2p-web-2024-yL7nQ2pS";
