@@ -12,14 +12,15 @@ import { extractVideoId } from "@/lib/utils";
 // ─── Sign In Modal ─────────────────────────────────────────────────────────────
 function SignInModal({ onClose }: { onClose: () => void }) {
   const { signIn } = useUser();
+  const tc = useTranslations("converter");
   const [signingIn, setSigningIn] = useState(false);
   const perks = [
-    "5 free conversions when you sign up",
-    "+1 free credit every day (max 5)",
-    "AI summary in 30+ languages",
-    "Natural voice playback (TTS)",
-    "Full transcript — any video length",
-    "Conversion history saved",
+    tc("signInPerk1"),
+    tc("signInPerk2"),
+    tc("signInPerk3"),
+    tc("signInPerk4"),
+    tc("signInPerk5"),
+    tc("signInPerk6"),
   ];
   const handleSignIn = async () => {
     setSigningIn(true);
@@ -43,8 +44,8 @@ function SignInModal({ onClose }: { onClose: () => void }) {
             <Image src="/logo.png" alt="Vid2Podcast" width={36} height={36} className="rounded-xl" />
             <span className="font-bold text-[#f0f0f5]">Vid2Podcast</span>
           </div>
-          <h2 className="text-2xl font-black text-[#f0f0f5] mt-4 mb-1">Get 5 Free Conversions</h2>
-          <p className="text-sm text-[#606070] mb-6">No credit card required · Cancel anytime</p>
+          <h2 className="text-2xl font-black text-[#f0f0f5] mt-4 mb-1">{tc("signInTitle")}</h2>
+          <p className="text-sm text-[#606070] mb-6">{tc("signInSubtitle")}</p>
           <ul className="space-y-2.5 mb-7">
             {perks.map((perk, i) => (
               <li key={perk} className="flex items-center gap-2.5 text-sm">
@@ -70,7 +71,7 @@ function SignInModal({ onClose }: { onClose: () => void }) {
                 <path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                 <path fill="white" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
                 <path fill="white" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-              </svg>Continue with Google — Free</>
+              </svg>{tc("signInBtn")}</>
             )}
           </button>
           <p className="text-center text-xs text-[#606070]">
@@ -85,6 +86,7 @@ function SignInModal({ onClose }: { onClose: () => void }) {
 
 // ─── Embedded Converter ────────────────────────────────────────────────────────
 function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
+  const tc = useTranslations("converter");
   const [ytUrl, setYtUrl] = useState("");
   const [tab, setTab] = useState<"youtube" | "upload">("youtube");
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -146,43 +148,43 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
 
   if (phase === "done" && result) {
     const unlockItems = [
-      { icon: "🤖", text: "AI summary in 30+ languages" },
-      { icon: "🔊", text: "Natural voice playback (TTS)" },
-      { icon: "📄", text: "Full transcript — no 5-min limit" },
-      { icon: "📜", text: "Conversion history saved" },
+      { icon: "🤖", text: tc("unlockAi") },
+      { icon: "🔊", text: tc("unlockVoice") },
+      { icon: "📄", text: tc("unlockTranscript") },
+      { icon: "📜", text: tc("unlockHistory") },
     ];
     return (
       <div className="w-full max-w-2xl mx-auto rounded-2xl border overflow-hidden shadow-2xl" style={{ background: "#111118", borderColor: "rgba(139,92,246,0.35)" }}>
         <div className="p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-[10px] text-[#606070] uppercase tracking-wider mb-0.5">Transcript</p>
+              <p className="text-[10px] text-[#606070] uppercase tracking-wider mb-0.5">{tc("transcript")}</p>
               <h3 className="text-sm font-semibold text-[#f0f0f5] max-w-xs truncate">{result.title}</h3>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={handleSpeak} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style={{ background: speaking ? "#6d28d9" : "#8b5cf6" }}>
-                {speaking ? (<><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>Stop</>) : (<><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>Listen</>)}
+                {speaking ? (<><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>{tc("stop")}</>) : (<><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>{tc("listen")}</>)}
               </button>
               <button onClick={() => { setPhase("idle"); setResult(null); if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); } }} className="px-3 py-1.5 rounded-lg text-xs text-[#a0a0b0] hover:text-[#f0f0f5] transition-colors" style={{ background: "rgba(255,255,255,0.06)" }}>
-                New
+                {tc("newBtn")}
               </button>
             </div>
           </div>
           {result.guestLimited && (
             <div className="mb-3 px-3.5 py-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
               <span className="text-yellow-400">⚠</span>
-              <span className="text-yellow-300">Showing first ~5 minutes only. Sign up free to get the full transcript.</span>
+              <span className="text-yellow-300">{tc("guestWarning")}</span>
             </div>
           )}
           <div className="rounded-xl p-4 text-sm text-[#a0a0b0] leading-relaxed overflow-y-auto mb-4" style={{ background: "#0a0a0f", maxHeight: "160px" }}>
             {result.transcript.slice(0, SNIPPET)}
             {result.transcript.length > SNIPPET && (
-              <span className="text-[#a78bfa] cursor-pointer ml-1" onClick={onSignIn}>... see full transcript →</span>
+              <span className="text-[#a78bfa] cursor-pointer ml-1" onClick={onSignIn}>{tc("seeFullTranscript")}</span>
             )}
           </div>
           <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(139,92,246,0.3)" }}>
             <div className="px-4 py-3" style={{ background: "rgba(139,92,246,0.08)" }}>
-              <p className="text-sm font-semibold text-[#f0f0f5] mb-1">🎉 Transcript ready! Sign up to unlock:</p>
+              <p className="text-sm font-semibold text-[#f0f0f5] mb-1">🎉 {tc("ctaTitle")}</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2.5">
                 {unlockItems.map((item) => (
                   <div key={item.text} className="flex items-center gap-1.5 text-xs text-[#a0a0b0]">
@@ -197,10 +199,10 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
                 style={{ background: "#4285F4" }}>
                 <span className="flex items-center justify-center gap-2">
                   <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="white" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="white" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" /><path fill="white" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
-                  Continue with Google — Get 5 Free Credits
+                  {tc("ctaBtn")}
                 </span>
               </button>
-              <p className="text-center text-[10px] text-[#606070]">No credit card · Takes 10 seconds</p>
+              <p className="text-center text-[10px] text-[#606070]">{tc("ctaNote")}</p>
             </div>
           </div>
         </div>
@@ -212,7 +214,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
     <div className="w-full max-w-2xl mx-auto rounded-2xl border overflow-hidden shadow-2xl" style={{ background: "#111118", borderColor: "rgba(139,92,246,0.3)" }}>
       <div className="p-5">
         <div className="flex gap-1.5 mb-4 p-1 rounded-xl" style={{ background: "#1a1a24" }}>
-          {[{ id: "youtube", label: "🎬 YouTube URL" }, { id: "upload", label: "📁 Upload File" }].map(({ id, label }) => (
+          {[{ id: "youtube", label: `🎬 ${tc("tabYoutube")}` }, { id: "upload", label: `📁 ${tc("tabUpload")}` }].map(({ id, label }) => (
             <button key={id} onClick={() => setTab(id as "youtube" | "upload")}
               className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${tab === id ? "text-white" : "text-[#606070] hover:text-[#a0a0b0]"}`}
               style={tab === id ? { background: "#8b5cf6" } : {}}>
@@ -223,7 +225,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
         {tab === "youtube" ? (
           <input value={ytUrl} onChange={(e) => setYtUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && phase !== "loading" && handleSubmit()}
-            placeholder="https://youtube.com/watch?v=..."
+            placeholder={tc("ytPlaceholder")}
             className="w-full px-4 py-3 rounded-xl text-sm mb-4 outline-none transition-all focus:border-[#8b5cf6]"
             style={{ background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.08)", color: "#f0f0f5" }} />
         ) : (
@@ -232,9 +234,9 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
             <input type="file" className="hidden" accept=".mp3,.wav,.m4a,.ogg,.webm,.mp4,.mov"
               onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
             {uploadFile ? (
-              <><span className="text-2xl">🎵</span><span className="text-sm text-[#f0f0f5]">{uploadFile.name}</span><span className="text-xs text-[#606070]">Click to change</span></>
+              <><span className="text-2xl">🎵</span><span className="text-sm text-[#f0f0f5]">{uploadFile.name}</span><span className="text-xs text-[#606070]">{tc("uploadChange")}</span></>
             ) : (
-              <><span className="text-2xl">📁</span><span className="text-sm text-[#a0a0b0]">Drop file or click to browse</span><span className="text-xs text-[#606070]">MP3, WAV, M4A, MP4, MOV — any size, runs in browser</span></>
+              <><span className="text-2xl">📁</span><span className="text-sm text-[#a0a0b0]">{tc("uploadIdle")}</span><span className="text-xs text-[#606070]">{tc("uploadFormats")}</span></>
             )}
           </label>
         )}
@@ -246,12 +248,12 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
           className="w-full py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)" }}>
           {phase === "loading" ? (
-            <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>{loadMsg || "Processing..."}</>
+            <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>{loadMsg || tc("processing")}</>
           ) : (
-            <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>Try Free — No Account Needed</>
+            <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>{tc("btnTry")}</>
           )}
         </button>
-        <p className="text-center text-xs text-[#606070] mt-2">No credit card · No sign-up · Works instantly</p>
+        <p className="text-center text-xs text-[#606070] mt-2">{tc("btnNote")}</p>
       </div>
     </div>
   );
@@ -259,10 +261,11 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
 
 // ─── Stats Counter ─────────────────────────────────────────────────────────────
 function StatsCounter() {
+  const tc = useTranslations("converter");
   const stats = [
-    { label: "Videos Converted", value: 12400, suffix: "+" },
-    { label: "Languages Supported", value: 30, suffix: "+" },
-    { label: "Chrome Store Rating", value: 4.9, suffix: "★", isFloat: true },
+    { label: tc("statsVideos"), value: 12400, suffix: "+" },
+    { label: tc("statsLangs"), value: 30, suffix: "+" },
+    { label: tc("statsRating"), value: 4.9, suffix: "★", isFloat: true },
   ];
   const [counts, setCounts] = useState([0, 0, 0]);
   const started = useRef(false);
