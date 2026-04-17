@@ -892,7 +892,6 @@ export default function ConverterPage() {
 
   // Input state
   const [url, setUrl] = useState(() => {
-    // Pre-fill from ?v=videoId (opened from history)
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search).get("v");
       if (p) return `https://www.youtube.com/watch?v=${p}`;
@@ -908,6 +907,26 @@ export default function ConverterPage() {
       setLanguage(profile.settings.defaultLanguage);
     }
   }, [profile?.id]);
+
+  // Auto-start pending conversion from landing page (after sign-in)
+  const pendingHandled = useRef(false);
+  useEffect(() => {
+    if (!user || pendingHandled.current) return;
+    try {
+      const raw = localStorage.getItem("v2p_pending");
+      if (!raw) return;
+      localStorage.removeItem("v2p_pending");
+      pendingHandled.current = true;
+      const { url: pendingUrl, lang } = JSON.parse(raw) as { url: string; lang: string };
+      if (!pendingUrl) return;
+      setUrl(pendingUrl);
+      if (lang && lang !== "original") setLanguage(lang);
+      // Small delay to let state settle, then auto-convert
+      setTimeout(() => {
+        document.getElementById("v2p-convert-btn")?.click();
+      }, 400);
+    } catch {}
+  }, [user]);
 
   // Queue / playlist
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -1562,6 +1581,7 @@ export default function ConverterPage() {
         {inputTab === "youtube" && (
           <>
             <button
+              id="v2p-convert-btn"
               onClick={handleConvert}
               disabled={loading || playlistLoading || queueRunning || !url.trim()}
               className="w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
