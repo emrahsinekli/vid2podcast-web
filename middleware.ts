@@ -8,12 +8,13 @@ const intlMiddleware = createIntlMiddleware(routing);
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Skip i18n for /app routes, /api, /auth, /_next, static files
+  // Skip i18n for /app routes, /api, /auth, /_next, static files, and standalone pages
   const isAppRoute = pathname.startsWith("/app");
   const isApiRoute = pathname.startsWith("/api") || pathname.startsWith("/auth");
   const isStatic = pathname.startsWith("/_next") || pathname.includes(".");
+  const isStandalone = ["/privacy", "/sitemap.xml", "/robots.txt", "/og"].some(p => pathname.startsWith(p));
 
-  if (!isAppRoute && !isApiRoute && !isStatic) {
+  if (!isAppRoute && !isApiRoute && !isStatic && !isStandalone) {
     // Apply i18n middleware for landing pages
     const intlResponse = intlMiddleware(request);
     if (intlResponse) return intlResponse;
