@@ -4,7 +4,7 @@
     "pricing": "Preços",
     "faq": "FAQ",
     "signIn": "Entrar",
-    "addToChrome": "Adicionar ao Chrome — Grátis"
+    "addToChrome": "Adicionar ao Chrome"
   },
   "hero": {
     "badge": "Extensão Chrome + App Web — Grátis",
@@ -189,6 +189,8 @@
     "unlockVoice": "Reprodução de voz natural (TTS)",
     "unlockTranscript": "Transcrição completa — sem limite de 5 min",
     "unlockHistory": "Histórico de conversões salvo",
-    "seeFullTranscript": "... ver transcrição completa →"
+    "seeFullTranscript": "... ver transcrição completa →",
+    "langLabel": "Idioma de saída",
+    "langOriginal": "🌐 Original (sem tradução)"
   }
 }

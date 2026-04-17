@@ -4,7 +4,7 @@
     "pricing": "Fiyatlar",
     "faq": "SSS",
     "signIn": "Giriş Yap",
-    "addToChrome": "Chrome'a Ekle — Ücretsiz"
+    "addToChrome": "Chrome'a Ekle"
   },
   "hero": {
     "badge": "Chrome Eklentisi + Web Uygulaması — Ücretsiz",
@@ -189,6 +189,8 @@
     "unlockVoice": "Doğal ses çıkışı (TTS)",
     "unlockTranscript": "Tam transkript — 5 dk sınırı yok",
     "unlockHistory": "Dönüştürme geçmişi kaydedildi",
-    "seeFullTranscript": "... tam transkripti gör →"
+    "seeFullTranscript": "... tam transkripti gör →",
+    "langLabel": "Çıktı dili",
+    "langOriginal": "🌐 Orijinal (çeviri yok)"
   }
 }

@@ -6,9 +6,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useUser } from "@/components/UserProvider";
-import { POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL, BACKEND_URL, GUEST_TOKEN } from "@/lib/constants";
+import { POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL, BACKEND_URL, GUEST_TOKEN, LANGUAGES } from "@/lib/constants";
 
 const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=landing";
+
+// Chrome 2022 icon (flat 3-segment wheel)
+function ChromeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#EA4335" d="M16 16 L16 0 A16 16 0 0 1 29.86 24 Z"/>
+      <path fill="#FBBC04" d="M16 16 L29.86 24 A16 16 0 0 1 2.14 24 Z"/>
+      <path fill="#34A853" d="M16 16 L2.14 24 A16 16 0 0 1 16 0 Z"/>
+      <circle cx="16" cy="16" r="9.5" fill="white"/>
+      <circle cx="16" cy="16" r="7.5" fill="#4285F4"/>
+    </svg>
+  );
+}
 import { extractVideoId } from "@/lib/utils";
 
 // ─── Sign In Modal ─────────────────────────────────────────────────────────────
@@ -93,10 +106,11 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
   const [tab, setTab] = useState<"youtube" | "upload">("youtube");
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [loadMsg, setLoadMsg] = useState("");
-  const [result, setResult] = useState<{ title: string; transcript: string; guestLimited?: boolean } | null>(null);
+  const [result, setResult] = useState<{ title: string; transcript: string; guestLimited?: boolean; targetLang?: string } | null>(null);
   const [error, setError] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [targetLang, setTargetLang] = useState("original");
 
   const handleSubmit = async () => {
     setPhase("loading");
@@ -117,7 +131,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
         transcript = data.transcript;
         title = data.title || "YouTube Video";
         if (data.guestLimited) {
-          setResult({ title, transcript, guestLimited: true });
+          setResult({ title, transcript, guestLimited: true, targetLang });
           setPhase("done");
           return;
         }
@@ -129,7 +143,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
         if (!transcript) throw new Error("Could not extract speech from this file.");
         title = uploadFile.name.replace(/\.[^.]+$/, "");
       }
-      setResult({ title, transcript });
+      setResult({ title, transcript, targetLang });
       setPhase("done");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
@@ -186,7 +200,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
           </div>
           <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(139,92,246,0.3)" }}>
             <div className="px-4 py-3" style={{ background: "rgba(139,92,246,0.08)" }}>
-              <p className="text-sm font-semibold text-[#f0f0f5] mb-1">🎉 {tc("ctaTitle")}</p>
+              <p className="text-sm font-semibold text-[#f0f0f5] mb-1">🎉 {result.targetLang && result.targetLang !== "original" ? `${tc("ctaTitle")} (${LANGUAGES.find(l => l.code === result.targetLang)?.label ?? result.targetLang})` : tc("ctaTitle")}</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2.5">
                 {unlockItems.map((item) => (
                   <div key={item.text} className="flex items-center gap-1.5 text-xs text-[#a0a0b0]">
@@ -242,6 +256,26 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
             )}
           </label>
         )}
+        {/* Language selector */}
+        <div className="mb-4">
+          <label className="block text-[10px] text-[#606070] uppercase tracking-wider mb-1.5">{tc("langLabel")}</label>
+          <div className="relative">
+            <select
+              value={targetLang}
+              onChange={(e) => setTargetLang(e.target.value)}
+              className="w-full appearance-none px-3 py-2.5 pr-8 rounded-xl text-sm outline-none transition-all cursor-pointer"
+              style={{ background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.08)", color: targetLang === "original" ? "#606070" : "#f0f0f5" }}>
+              <option value="original">{tc("langOriginal")}</option>
+              {LANGUAGES.filter(l => l.code !== "original").map(l => (
+                <option key={l.code} value={l.code}>{l.label}</option>
+              ))}
+            </select>
+            <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#606070]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </div>
+
         {phase === "error" && (
           <div className="mb-4 p-3 rounded-xl text-xs text-red-300" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>{error}</div>
         )}
@@ -592,18 +626,7 @@ function LandingInner() {
             <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer"
               className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:text-[#f0f0f5]"
               style={{ color: "#a0a0b0", border: "1px solid rgba(255,255,255,0.1)" }}>
-              <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="4" fill="#4285F4"/>
-                <path d="M12 8a4 4 0 100 8 4 4 0 000-8z" fill="#34A853" opacity="0"/>
-                <path fill="#EA4335" d="M20.5 12H12V8h8.5c.8 1.2 1.2 2.5 1.2 4s-.4 2.8-1.2 4z" opacity="0"/>
-                <circle cx="12" cy="12" r="10" fill="none" stroke="#4285F4" strokeWidth="2"/>
-                <circle cx="12" cy="12" r="6" fill="none" stroke="#FBBC04" strokeWidth="2"/>
-                <circle cx="12" cy="12" r="4" fill="#4285F4"/>
-                <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12h4a6 6 0 016-6V2z"/>
-                <path fill="#34A853" d="M22 12c0-5.52-4.48-10-10-10v4a6 6 0 010 12v4c5.52 0 10-4.48 10-10z"/>
-                <path fill="#FBBC04" d="M12 22c5.52 0 10-4.48 10-10h-4a6 6 0 01-6 6v4z"/>
-                <path fill="#4285F4" d="M2 12c0 5.52 4.48 10 10 10v-4a6 6 0 010-12V2C6.48 2 2 6.48 2 12z"/>
-              </svg>
+              <ChromeIcon className="w-3.5 h-3.5 flex-shrink-0" />
               {tNav("addToChrome")}
             </a>
             <button onClick={() => setShowSignIn(true)}
@@ -626,21 +649,6 @@ function LandingInner() {
             style={{ background: "radial-gradient(circle, #22c55e 0%, transparent 70%)", filter: "blur(60px)" }} />
         </div>
         <div className="relative max-w-5xl mx-auto text-center">
-          <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full border text-sm font-medium mb-8 transition-all hover:scale-105 hover:shadow-lg group"
-            style={{ background: "rgba(66,133,244,0.08)", borderColor: "rgba(66,133,244,0.3)", color: "#93c5fd" }}>
-            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
-              <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12h4a6 6 0 016-6V2z"/>
-              <path fill="#34A853" d="M22 12c0-5.52-4.48-10-10-10v4a6 6 0 010 12v4c5.52 0 10-4.48 10-10z"/>
-              <path fill="#FBBC04" d="M12 22c5.52 0 10-4.48 10-10h-4a6 6 0 01-6 6v4z"/>
-              <path fill="#4285F4" d="M2 12c0 5.52 4.48 10 10 10v-4a6 6 0 010-12V2C6.48 2 2 6.48 2 12z"/>
-              <circle cx="12" cy="12" r="4" fill="#4285F4"/>
-            </svg>
-            <span>{tHero("badge")}</span>
-            <svg className="w-3 h-3 opacity-60 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/>
-            </svg>
-          </a>
           <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-4 leading-tight">
             {tHero("title1")}<br /><span className="gradient-text">{tHero("title2")}</span>
           </h1>
