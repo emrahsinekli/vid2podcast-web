@@ -1307,66 +1307,63 @@ export default function ConverterPage() {
     URL.revokeObjectURL(a.href);
   };
 
+  const printWindow = (html: string) => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 400);
+  };
+
+  const pdfStyles = `
+    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #111; font-size: 12px; line-height: 1.7; }
+    h1 { font-size: 20px; font-weight: 700; margin: 0 0 4px; color: #1a1a2e; }
+    .meta { font-size: 11px; color: #666; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #8b5cf6; }
+    .meta span { margin-right: 16px; }
+    .segment { display: flex; gap: 12px; margin-bottom: 10px; page-break-inside: avoid; }
+    .ts { font-size: 10px; color: #8b5cf6; font-weight: 600; min-width: 42px; padding-top: 2px; font-variant-numeric: tabular-nums; }
+    .txt { flex: 1; }
+    p { margin: 0 0 10px; }
+    @media print { body { padding: 20px; } }
+  `;
+
+  const formatTs = (s: number) => {
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
+
   const handleDownloadPdf = () => {
     if (!result) return;
-    const lines = result.transcript.split("\n");
-    const pageWidth = 595, margin = 50, lineHeight = 14, fontSize = 10;
-    const usable = pageWidth - margin * 2;
-    const charsPerLine = Math.floor(usable / (fontSize * 0.5));
-    const wrappedLines: string[] = [];
-    for (const line of lines) {
-      if (!line.trim()) { wrappedLines.push(""); continue; }
-      let remaining = line;
-      while (remaining.length > charsPerLine) {
-        const cut = remaining.lastIndexOf(" ", charsPerLine) || charsPerLine;
-        wrappedLines.push(remaining.slice(0, cut));
-        remaining = remaining.slice(cut + 1);
-      }
-      wrappedLines.push(remaining);
+    const date = new Date().toLocaleDateString();
+    let bodyHtml = "";
+    if (result.segments && result.segments.length > 0) {
+      bodyHtml = result.segments.map((seg) =>
+        `<div class="segment"><span class="ts">[${formatTs(seg.t)}]</span><span class="txt">${seg.text.replace(/</g, "&lt;")}</span></div>`
+      ).join("");
+    } else {
+      bodyHtml = result.transcript.split("\n").filter(Boolean).map((l) =>
+        `<p>${l.replace(/</g, "&lt;")}</p>`
+      ).join("");
     }
-    const pageHeight = 842, contentHeight = pageHeight - margin * 2;
-    const linesPerPage = Math.floor(contentHeight / lineHeight);
-    const pages: string[][] = [];
-    for (let i = 0; i < wrappedLines.length; i += linesPerPage) pages.push(wrappedLines.slice(i, i + linesPerPage));
-    if (!pages.length) pages.push([]);
+    printWindow(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${result.title} — Transcript</title><style>${pdfStyles}</style></head><body>
+      <h1>${result.title.replace(/</g, "&lt;")}</h1>
+      <div class="meta"><span>📺 ${result.author || "YouTube"}</span><span>📅 ${date}</span><span>🎙️ Vid2Podcast</span></div>
+      ${bodyHtml}
+    </body></html>`);
+  };
 
-    const escPdf = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-    let pdf = `%PDF-1.4\n`;
-    const objs: string[] = ["", ""];
-    // page tree
-    objs[1] = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
-    const pageIds = pages.map((_, i) => `${4 + i * 2} 0 R`).join(" ");
-    objs[2] = `2 0 obj\n<< /Type /Pages /Kids [${pageIds}] /Count ${pages.length} >>\nendobj\n`;
-    objs[3] = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`;
-    for (let p = 0; p < pages.length; p++) {
-      const contentObjId = 5 + p * 2;
-      const streamLines = pages[p].map((l, li) =>
-        `BT /F1 ${fontSize} Tf ${margin} ${pageHeight - margin - li * lineHeight} Td (${escPdf(l)}) Tj ET`
-      ).join("\n");
-      const stream = streamLines || "BT ET";
-      objs[4 + p * 2] = `${4 + p * 2} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 3 0 R >> >> >>\nendobj\n`;
-      objs[5 + p * 2] = `${contentObjId} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`;
-    }
-    let body = "";
-    const offsets: number[] = [];
-    const pdfHeader = pdf;
-    body += pdfHeader;
-    for (let i = 1; i < objs.length; i++) {
-      if (!objs[i]) continue;
-      offsets[i] = body.length;
-      body += objs[i];
-    }
-    const xrefOffset = body.length;
-    const objCount = objs.length;
-    body += `xref\n0 ${objCount}\n0000000000 65535 f \n`;
-    for (let i = 1; i < objCount; i++) body += `${String(offsets[i] ?? 0).padStart(10, "0")} 00000 n \n`;
-    body += `trailer\n<< /Size ${objCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-    const blob = new Blob([body], { type: "application/pdf" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${baseName(result.title)}_transcript.pdf`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  const handleDownloadSummaryPdf = () => {
+    if (!result || !summaryText) return;
+    const date = new Date().toLocaleDateString();
+    const summaryHtml = summaryText.split("\n").filter(Boolean).map((l) =>
+      `<p>${l.replace(/</g, "&lt;")}</p>`
+    ).join("");
+    printWindow(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${result.title} — Summary</title><style>${pdfStyles}</style></head><body>
+      <h1>${result.title.replace(/</g, "&lt;")}</h1>
+      <div class="meta"><span>📺 ${result.author || "YouTube"}</span><span>📅 ${date}</span><span>🎙️ Vid2Podcast — AI Summary</span></div>
+      ${summaryHtml}
+    </body></html>`);
   };
 
   const handleShareTranscript = async () => {
@@ -1850,6 +1847,18 @@ export default function ConverterPage() {
                     summaryText || "No content to summarize."
                   )}
                 </div>
+                {summaryText && (
+                  <div className="flex justify-end mt-3">
+                    <button
+                      onClick={handleDownloadSummaryPdf}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[var(--text2)] border transition-all duration-150 hover:bg-white/5"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      Download Summary PDF
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
