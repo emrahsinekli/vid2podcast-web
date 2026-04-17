@@ -1600,6 +1600,7 @@ export default function ConverterPage() {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
+                        "x-v2p-token": WEB_TTS_TOKEN,
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                       },
                       body: JSON.stringify({ text: transcript, target: language }),
@@ -1607,8 +1608,12 @@ export default function ConverterPage() {
                     if (tRes.ok) {
                       const tData = await tRes.json();
                       transcript = tData.translated || transcript;
+                    } else {
+                      console.error("Translate failed:", tRes.status, await tRes.text());
                     }
-                  } catch (_) { /* keep original on translate error */ } finally {
+                  } catch (e) {
+                    console.error("Translate error:", e);
+                  } finally {
                     setLoading(false);
                     setLoadingMsg("");
                   }
