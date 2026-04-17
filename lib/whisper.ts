@@ -22,8 +22,12 @@ async function loadWhisper(onProgress?: WhisperProgress): Promise<any> {
 
     pipelineCache = await pipeline(
       "automatic-speech-recognition",
-      "Xenova/whisper-tiny",
+      "onnx-community/whisper-tiny",
       {
+        dtype: {
+          encoder_model: "fp32",
+          decoder_model_merged: "q8",
+        },
         progress_callback: (info: any) => {
           if (info.status === "downloading" && info.total) {
             const pct = Math.round((info.loaded / info.total) * 100);
