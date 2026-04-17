@@ -34,8 +34,10 @@ export const LANGUAGES = [
 ];
 
 export const FREE_LIMIT = 1;
-export const FREE_CHAT_LIMIT = 2;
+export const FREE_CHAT_LIMIT = 2;       // chat messages per day for free users
+export const FREE_SUMMARY_DAILY = 1;   // AI summaries per day for free users
 export const FREE_SUMMARY_WORDS = 80;
+export const FREE_TRANSCRIPT_MINUTES = 15; // max video length (minutes) for free users
 export const SIGNUP_CREDITS = 5;
 export const DAILY_REFILL_CREDITS = 1;
 export const MAX_FREE_CREDITS = 5;

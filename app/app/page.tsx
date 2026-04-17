@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_SUMMARY_WORDS, LANGUAGES, POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
+import { BACKEND_URL, FREE_CHAT_LIMIT, FREE_SUMMARY_DAILY, FREE_SUMMARY_WORDS, FREE_TRANSCRIPT_MINUTES, LANGUAGES, POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL } from "@/lib/constants";
 import { summarize, SummaryType } from "@/lib/summary";
 import { freeAISummarize, freeAIAnswer, canUseAI } from "@/lib/free-ai";
 import { extractVideoId, extractPlaylistId, parseInputUrls } from "@/lib/utils";
@@ -78,6 +78,26 @@ interface ConversionResult {
   author: string;
   transcript: string;
   segments: TranscriptSegment[]; // real YouTube timestamps
+  transcriptTruncated?: boolean; // true when capped at FREE_TRANSCRIPT_MINUTES for free users
+}
+
+// ─── Daily usage helpers (localStorage) ─────────────────────────────────────
+const todayKey = () => new Date().toISOString().slice(0, 10);
+
+function getDailyUsage(key: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return 0;
+    const { date, count } = JSON.parse(raw) as { date: string; count: number };
+    return date === todayKey() ? count : 0;
+  } catch { return 0; }
+}
+
+function incrementDailyUsage(key: string): number {
+  const next = getDailyUsage(key) + 1;
+  localStorage.setItem(key, JSON.stringify({ date: todayKey(), count: next }));
+  return next;
 }
 
 // ─── Pro Wall Modal ──────────────────────────────────────────────────────────
@@ -955,6 +975,14 @@ export default function ConverterPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Free daily usage counters (loaded from localStorage)
+  const [freeSummaryUsed, setFreeSummaryUsed] = useState(0);
+  const [freeChatUsed, setFreeChatUsed] = useState(0);
+  useEffect(() => {
+    setFreeSummaryUsed(getDailyUsage("v2p_free_summary"));
+    setFreeChatUsed(getDailyUsage("v2p_free_chat"));
+  }, []);
+
   // Pro wall
   const [showProWall, setShowProWall] = useState(false);
   const [proWallReason, setProWallReason] = useState<"limit" | "feature">("feature");
@@ -1035,27 +1063,42 @@ export default function ConverterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // AI summary — Groq for mobile (no Gemini Nano), Chrome AI for desktop
+  // AI summary — Groq for everyone; free users limited to FREE_SUMMARY_DAILY/day
   useEffect(() => {
     if (!result) { setAiSummary(""); return; }
+
+    // Free user: check daily summary limit
+    if (!isPro) {
+      const used = getDailyUsage("v2p_free_summary");
+      if (used >= FREE_SUMMARY_DAILY) {
+        setAiSummary("__LIMIT__"); // sentinel — UI renders upgrade prompt
+        return;
+      }
+    }
+
     setSummaryLoading(true);
-    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (isMobile) {
+    const wordCount = isPro ? 300 : FREE_SUMMARY_WORDS;
+    getToken().then((token) =>
       fetch(`${BACKEND_URL}/api/ai`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
-        body: JSON.stringify({ type: "summary", transcript: result.transcript, wordCount: 300 }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-v2p-token": WEB_TTS_TOKEN,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ type: "summary", transcript: result.transcript, wordCount }),
       })
         .then((r) => r.ok ? r.json() : Promise.reject())
-        .then((d) => setAiSummary(d.result ?? ""))
+        .then((d) => {
+          setAiSummary(d.result ?? "");
+          if (!isPro) {
+            const newCount = incrementDailyUsage("v2p_free_summary");
+            setFreeSummaryUsed(newCount);
+          }
+        })
         .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
-        .finally(() => setSummaryLoading(false));
-    } else {
-      freeAISummarize(result.transcript, { wordCount: FREE_SUMMARY_WORDS, isPro })
-        .then((s) => setAiSummary(s))
-        .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
-        .finally(() => setSummaryLoading(false));
-    }
+        .finally(() => setSummaryLoading(false))
+    );
   }, [result?.videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getToken = async () => {
@@ -1260,6 +1303,29 @@ export default function ConverterPage() {
         transcript,
         segments,
       };
+
+      // Free users: cap transcript at FREE_TRANSCRIPT_MINUTES
+      if (!isPro) {
+        const maxSec = FREE_TRANSCRIPT_MINUTES * 60;
+        if (convResult.segments.length > 0) {
+          const lastSeg = convResult.segments[convResult.segments.length - 1];
+          if (lastSeg.t > maxSec) {
+            const truncSegs = convResult.segments.filter((s) => s.t <= maxSec);
+            convResult.transcript = truncSegs.map((s) => s.text).join(" ");
+            convResult.segments = truncSegs;
+            convResult.transcriptTruncated = true;
+          }
+        } else {
+          // No segments: estimate ~130 words/min
+          const maxWords = FREE_TRANSCRIPT_MINUTES * 130;
+          const words = convResult.transcript.split(/\s+/);
+          if (words.length > maxWords) {
+            convResult.transcript = words.slice(0, maxWords).join(" ");
+            convResult.transcriptTruncated = true;
+          }
+        }
+      }
+
       setResult(convResult);
       setTab("transcript");
       setAudioGenTrigger((t) => t + 1);
@@ -1388,24 +1454,42 @@ export default function ConverterPage() {
     setChatMessages((prev) => [...prev, { role: "user", text: question }]);
     setChatLoading(true);
 
+    // Free user: check daily chat limit before anything
+    if (!isPro) {
+      const used = getDailyUsage("v2p_free_chat");
+      if (used >= FREE_CHAT_LIMIT) {
+        setChatMessages((prev) => [...prev, {
+          role: "assistant",
+          text: `__CHAT_LIMIT__`,
+        }]);
+        setChatLoading(false);
+        return;
+      }
+    }
+
     try {
       let answer = "";
-      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-      if (isMobile) {
-        // Mobile: Gemini Nano unavailable → use Groq backend
-        const res = await fetch(`${BACKEND_URL}/api/ai`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
-          body: JSON.stringify({ type: "chat", transcript: result.transcript, question }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          answer = data.result ?? "";
-        }
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/api/ai`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-v2p-token": WEB_TTS_TOKEN,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ type: "chat", transcript: result.transcript, question }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        answer = data.result ?? "";
       }
-      // Desktop: use Chrome AI (Gemini Nano) / extractive fallback
       if (!answer) {
         answer = await freeAIAnswer(result.transcript, question, isPro);
+      }
+      // Increment daily counter for free users
+      if (!isPro) {
+        const newCount = incrementDailyUsage("v2p_free_chat");
+        setFreeChatUsed(newCount);
       }
       setChatMessages((prev) => [...prev, { role: "assistant", text: answer }]);
     } catch (e: unknown) {
@@ -1737,6 +1821,18 @@ export default function ConverterPage() {
             {/* ── Transcript Tab ── */}
             {tab === "transcript" && (
               <div className="p-3 md:p-5">
+                {/* Free plan truncation notice */}
+                {result.transcriptTruncated && !isPro && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-3 text-xs" style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", color: "#f59e0b" }}>
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>
+                      <strong>Free plan:</strong> showing first {FREE_TRANSCRIPT_MINUTES} minutes.{" "}
+                      <a href={POLAR_BUY_URL} className="underline font-semibold">Upgrade to Pro</a> for the full transcript.
+                    </span>
+                  </div>
+                )}
                 {!realTimestamps && effectiveSegments.length > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg mb-3 text-[11px]" style={{ background: "var(--bg3)", color: "var(--text3)" }}>
                     <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1825,12 +1921,14 @@ export default function ConverterPage() {
                 </div>
 
                 {!isPro && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-xs" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#a78bfa" }}>
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Free plan: summary limited to {FREE_SUMMARY_WORDS} words.{" "}
-                    <a href={POLAR_BUY_URL} className="underline font-medium">Upgrade for full summaries</a>
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg mb-4 text-xs" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#a78bfa" }}>
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Free plan: {FREE_SUMMARY_DAILY - freeSummaryUsed > 0 ? `${FREE_SUMMARY_DAILY - freeSummaryUsed}/${FREE_SUMMARY_DAILY} AI summary remaining today` : "Daily AI summary used — resets tomorrow"}.
+                    </span>
+                    <a href={POLAR_BUY_URL} className="underline font-medium whitespace-nowrap">Upgrade for unlimited</a>
                   </div>
                 )}
 
@@ -1842,6 +1940,15 @@ export default function ConverterPage() {
                     <div className="flex flex-col items-center justify-center h-full gap-3">
                       <div className="w-6 h-6 rounded-full border-2 border-[#8b5cf6] border-t-transparent animate-spin" />
                       <span className="text-xs text-[var(--text3)]">Generating AI summary…</span>
+                    </div>
+                  ) : aiSummary === "__LIMIT__" && summaryType === "descriptive" ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                      <svg className="w-8 h-8 text-[#f59e0b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-medium text-[var(--text)]">Daily AI summary used</p>
+                      <p className="text-xs text-[var(--text3)]">You get {FREE_SUMMARY_DAILY} AI summary per day on the free plan. Resets at midnight.</p>
+                      <a href={POLAR_BUY_URL} className="mt-1 text-xs px-4 py-2 rounded-lg font-semibold text-white" style={{ background: "#8b5cf6" }}>Upgrade to Pro — Unlimited</a>
                     </div>
                   ) : (
                     summaryText || "No content to summarize."
@@ -1866,12 +1973,14 @@ export default function ConverterPage() {
             {tab === "chat" && (
               <div className="p-3 md:p-5">
                 {!isPro && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-xs" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#a78bfa" }}>
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-                    </svg>
-                    {chatMessages.filter((m) => m.role === "user").length}/{FREE_CHAT_LIMIT} messages used on Free plan.{" "}
-                    <a href={POLAR_BUY_URL} className="underline font-medium">Upgrade for unlimited chat</a>
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg mb-4 text-xs" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#a78bfa" }}>
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                      </svg>
+                      {Math.max(0, FREE_CHAT_LIMIT - freeChatUsed)}/{FREE_CHAT_LIMIT} chats remaining today
+                    </span>
+                    <a href={POLAR_BUY_URL} className="underline font-medium whitespace-nowrap">Upgrade for unlimited</a>
                   </div>
                 )}
 
@@ -1904,7 +2013,12 @@ export default function ConverterPage() {
                         className={`max-w-[75%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "text-white rounded-tr-sm" : "text-[var(--text2)] rounded-tl-sm"}`}
                         style={msg.role === "user" ? { background: "#8b5cf6" } : { background: "var(--bg3)" }}
                       >
-                        {msg.text}
+                        {msg.text === "__CHAT_LIMIT__" ? (
+                          <span>
+                            You&apos;ve used all {FREE_CHAT_LIMIT} free chats for today. Resets at midnight.{" "}
+                            <a href={POLAR_BUY_URL} className="underline font-semibold" style={{ color: "#a78bfa" }}>Upgrade to Pro</a> for unlimited.
+                          </span>
+                        ) : msg.text}
                       </div>
                     </div>
                   ))}
