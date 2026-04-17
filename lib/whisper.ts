@@ -1,6 +1,6 @@
 // Browser-based audio/video transcription using Whisper
 // Runs 100% in the browser — no server, no API key, no cost
-// Model: whisper-tiny (~75MB, downloads once, cached in browser)
+// Model: whisper-tiny (downloads once, cached in browser)
 
 "use client";
 
@@ -14,7 +14,7 @@ async function loadWhisper(onProgress?: WhisperProgress): Promise<any> {
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    onProgress?.("Loading Whisper AI model (first time ~75MB, then cached)...", 0);
+    onProgress?.("Loading Whisper AI model (cached after first use)...", 0);
 
     const { pipeline, env } = await import("@huggingface/transformers");
     env.allowRemoteModels = true;
