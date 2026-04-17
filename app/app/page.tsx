@@ -1588,12 +1588,36 @@ export default function ConverterPage() {
         {inputTab === "upload" && (
           <div className="mb-5">
             <FileUpload
-              onTranscript={(text, title) => {
+              onTranscript={async (text, title) => {
+                let transcript = text;
+                // Translate if a non-original language is selected
+                if (language !== "original" && transcript) {
+                  setLoading(true);
+                  setLoadingMsg("Translating...");
+                  try {
+                    const token = await getToken();
+                    const tRes = await fetch(`${BACKEND_URL}/api/translate`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      },
+                      body: JSON.stringify({ text: transcript, target: language }),
+                    });
+                    if (tRes.ok) {
+                      const tData = await tRes.json();
+                      transcript = tData.translated || transcript;
+                    }
+                  } catch (_) { /* keep original on translate error */ } finally {
+                    setLoading(false);
+                    setLoadingMsg("");
+                  }
+                }
                 const convResult: ConversionResult = {
                   videoId: "upload_" + Date.now(),
                   title,
                   author: "Uploaded File",
-                  transcript: text,
+                  transcript,
                   segments: [],
                 };
                 setResult(convResult);
