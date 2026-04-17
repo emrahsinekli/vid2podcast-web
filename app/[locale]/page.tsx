@@ -99,6 +99,35 @@ function SignInModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// Simple extractive summary — pick top sentences by word frequency
+function extractiveSummary(text: string, maxWords = 60): string {
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  if (sentences.length <= 2) return sentences.join(" ").split(/\s+/).slice(0, maxWords).join(" ");
+  const freq: Record<string, number> = {};
+  text.toLowerCase().split(/\s+/).forEach((w) => { if (w.length > 3) freq[w] = (freq[w] || 0) + 1; });
+  const scored = sentences.map((s, i) => {
+    const words = s.toLowerCase().split(/\s+/);
+    const score = words.reduce((a, w) => a + (freq[w] || 0), 0) / (words.length || 1);
+    return { s: s.trim(), score: score * (i === 0 ? 2 : 1), idx: i };
+  });
+  const top = [...scored].sort((a, b) => b.score - a.score).slice(0, 3).sort((a, b) => a.idx - b.idx);
+  const result = top.map((x) => x.s).join(" ");
+  return result.split(/\s+/).slice(0, maxWords).join(" ");
+}
+
+// Free Google Translate (unofficial, no API key)
+async function translateText(text: string, targetLang: string): Promise<string> {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(text)}`;
+    const r = await fetch(url);
+    if (!r.ok) return text;
+    const data = await r.json();
+    return (data[0] as [string, string][]).map((s) => s[0]).join("");
+  } catch {
+    return text;
+  }
+}
+
 // ─── Embedded Converter ────────────────────────────────────────────────────────
 function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
   const tc = useTranslations("converter");
@@ -106,17 +135,29 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
   const [tab, setTab] = useState<"youtube" | "upload">("youtube");
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [loadMsg, setLoadMsg] = useState("");
-  const [result, setResult] = useState<{ title: string; transcript: string; guestLimited?: boolean; targetLang?: string } | null>(null);
+  const [result, setResult] = useState<{ title: string; transcript: string; summary: string; guestLimited?: boolean; targetLang?: string } | null>(null);
   const [error, setError] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [targetLang, setTargetLang] = useState("original");
+  const [activeTab, setActiveTab] = useState<"summary" | "transcript">("summary");
+  const uttRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Stop speech on unmount / page navigation / refresh
+  useEffect(() => {
+    const stop = () => { window.speechSynthesis?.cancel(); setSpeaking(false); };
+    window.addEventListener("beforeunload", stop);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) stop(); });
+    return () => { stop(); window.removeEventListener("beforeunload", stop); };
+  }, []);
 
   const handleSubmit = async () => {
     setPhase("loading");
     setError("");
     try {
       let transcript = "", title = "Video";
+      let guestLimited = false;
+
       if (tab === "youtube") {
         const videoId = extractVideoId(ytUrl.trim());
         if (!videoId) throw new Error("Invalid YouTube URL. Please paste a youtube.com link.");
@@ -130,11 +171,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
         if (data.error) throw new Error(data.error);
         transcript = data.transcript;
         title = data.title || "YouTube Video";
-        if (data.guestLimited) {
-          setResult({ title, transcript, guestLimited: true, targetLang });
-          setPhase("done");
-          return;
-        }
+        guestLimited = !!data.guestLimited;
       } else {
         if (!uploadFile) throw new Error("Please select a file.");
         setLoadMsg("Transcribing in browser...");
@@ -143,7 +180,17 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
         if (!transcript) throw new Error("Could not extract speech from this file.");
         title = uploadFile.name.replace(/\.[^.]+$/, "");
       }
-      setResult({ title, transcript, targetLang });
+
+      // Translate if language selected
+      let displayTranscript = transcript;
+      if (targetLang !== "original") {
+        setLoadMsg("Translating...");
+        displayTranscript = await translateText(transcript, targetLang);
+      }
+
+      const summary = extractiveSummary(displayTranscript, 70);
+      setResult({ title, transcript: displayTranscript, summary, guestLimited, targetLang });
+      setActiveTab("summary");
       setPhase("done");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
@@ -154,67 +201,72 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
   const handleSpeak = () => {
     if (!result) return;
     if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
-    const utter = new SpeechSynthesisUtterance(result.transcript.slice(0, 3000));
+    const utter = new SpeechSynthesisUtterance(result.transcript.slice(0, 4000));
+    uttRef.current = utter;
     utter.onend = () => setSpeaking(false);
+    utter.onerror = () => setSpeaking(false);
+    if (targetLang !== "original") {
+      const langEntry = LANGUAGES.find(l => l.code === targetLang);
+      if (langEntry?.bcp47) utter.lang = langEntry.bcp47;
+    }
     window.speechSynthesis.speak(utter);
     setSpeaking(true);
   };
 
-  const SNIPPET = 500;
-
   if (phase === "done" && result) {
-    const unlockItems = [
-      { icon: "🤖", text: tc("unlockAi") },
-      { icon: "🔊", text: tc("unlockVoice") },
-      { icon: "📄", text: tc("unlockTranscript") },
-      { icon: "📜", text: tc("unlockHistory") },
-    ];
     return (
       <div className="w-full max-w-2xl mx-auto rounded-2xl border overflow-hidden shadow-2xl" style={{ background: "#111118", borderColor: "rgba(139,92,246,0.35)" }}>
         <div className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-[10px] text-[#606070] uppercase tracking-wider mb-0.5">{tc("transcript")}</p>
-              <h3 className="text-sm font-semibold text-[#f0f0f5] max-w-xs truncate">{result.title}</h3>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-[#f0f0f5] truncate max-w-[240px]">{result.title}</h3>
+              {result.guestLimited && (
+                <p className="text-[10px] text-yellow-400 mt-0.5">⚠ {tc("guestWarning")}</p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button onClick={handleSpeak} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style={{ background: speaking ? "#6d28d9" : "#8b5cf6" }}>
-                {speaking ? (<><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>{tc("stop")}</>) : (<><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>{tc("listen")}</>)}
+                {speaking
+                  ? <><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>{tc("stop")}</>
+                  : <><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>{tc("listen")}</>}
               </button>
-              <button onClick={() => { setPhase("idle"); setResult(null); if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); } }} className="px-3 py-1.5 rounded-lg text-xs text-[#a0a0b0] hover:text-[#f0f0f5] transition-colors" style={{ background: "rgba(255,255,255,0.06)" }}>
+              <button onClick={() => { window.speechSynthesis.cancel(); setSpeaking(false); setPhase("idle"); setResult(null); }}
+                className="px-3 py-1.5 rounded-lg text-xs text-[#a0a0b0] hover:text-[#f0f0f5] transition-colors" style={{ background: "rgba(255,255,255,0.06)" }}>
                 {tc("newBtn")}
               </button>
             </div>
           </div>
-          {result.guestLimited && (
-            <div className="mb-3 px-3.5 py-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
-              <span className="text-yellow-400">⚠</span>
-              <span className="text-yellow-300">{tc("guestWarning")}</span>
-            </div>
-          )}
-          <div className="rounded-xl p-4 text-sm text-[#a0a0b0] leading-relaxed overflow-y-auto mb-4" style={{ background: "#0a0a0f", maxHeight: "160px" }}>
-            {result.transcript.slice(0, SNIPPET)}
-            {result.transcript.length > SNIPPET && (
-              <span className="text-[#a78bfa] cursor-pointer ml-1" onClick={onSignIn}>{tc("seeFullTranscript")}</span>
-            )}
+
+          {/* Summary / Transcript tabs */}
+          <div className="flex gap-1 mb-3 p-0.5 rounded-lg" style={{ background: "#1a1a24" }}>
+            {(["summary", "transcript"] as const).map((t) => (
+              <button key={t} onClick={() => setActiveTab(t)}
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${activeTab === t ? "text-white" : "text-[#606070]"}`}
+                style={activeTab === t ? { background: "#8b5cf6" } : {}}>
+                {t === "summary" ? "✨ AI Summary" : "📄 Transcript"}
+              </button>
+            ))}
           </div>
+
+          <div className="rounded-xl p-4 text-sm text-[#a0a0b0] leading-relaxed overflow-y-auto mb-4" style={{ background: "#0a0a0f", maxHeight: "180px" }}>
+            {activeTab === "summary" ? result.summary : result.transcript}
+          </div>
+
+          {/* Sign-up CTA */}
           <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(139,92,246,0.3)" }}>
-            <div className="px-4 py-3" style={{ background: "rgba(139,92,246,0.08)" }}>
-              <p className="text-sm font-semibold text-[#f0f0f5] mb-1">🎉 {result.targetLang && result.targetLang !== "original" ? `${tc("ctaTitle")} (${LANGUAGES.find(l => l.code === result.targetLang)?.label ?? result.targetLang})` : tc("ctaTitle")}</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2.5">
-                {unlockItems.map((item) => (
-                  <div key={item.text} className="flex items-center gap-1.5 text-xs text-[#a0a0b0]">
-                    <span>{item.icon}</span><span>{item.text}</span>
-                  </div>
+            <div className="px-4 py-2.5" style={{ background: "rgba(139,92,246,0.08)" }}>
+              <p className="text-xs font-semibold text-[#f0f0f5] mb-1.5">🎉 {tc("ctaTitle")}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {([["🤖", tc("unlockAi")], ["🔊", tc("unlockVoice")], ["📄", tc("unlockTranscript")], ["📜", tc("unlockHistory")]] as [string, string][]).map(([icon, text]) => (
+                  <div key={text} className="flex items-center gap-1 text-[10px] text-[#a0a0b0]"><span>{icon}</span><span>{text}</span></div>
                 ))}
               </div>
             </div>
-            <div className="px-4 py-3" style={{ background: "rgba(139,92,246,0.04)" }}>
-              <button onClick={onSignIn}
-                className="w-full py-2.5 rounded-lg text-sm font-bold text-white hover:opacity-90 transition-all mb-2"
-                style={{ background: "#4285F4" }}>
+            <div className="px-4 py-2.5" style={{ background: "rgba(139,92,246,0.04)" }}>
+              <button onClick={onSignIn} className="w-full py-2 rounded-lg text-xs font-bold text-white hover:opacity-90 transition-all mb-1.5" style={{ background: "#4285F4" }}>
                 <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="white" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="white" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" /><path fill="white" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="white" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="white" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="white" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                   {tc("ctaBtn")}
                 </span>
               </button>
@@ -324,7 +376,7 @@ function SocialProof() {
   const ticker = [...platforms, ...platforms];
 
   return (
-    <div className="mt-10 space-y-6">
+    <div className="mt-6 space-y-4">
       {/* Award-style stat badges */}
       <div className="flex items-center justify-center gap-4 md:gap-8 flex-wrap">
         {stats.map((s, i) => (
@@ -639,7 +691,7 @@ function LandingInner() {
       </nav>
 
       {/* ── Hero ── */}
-      <section className="relative pt-24 pb-16 px-6 overflow-hidden">
+      <section className="relative pt-20 pb-10 px-6 overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full opacity-20"
             style={{ background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)", filter: "blur(80px)" }} />
@@ -649,10 +701,10 @@ function LandingInner() {
             style={{ background: "radial-gradient(circle, #22c55e 0%, transparent 70%)", filter: "blur(60px)" }} />
         </div>
         <div className="relative max-w-5xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-4 leading-tight">
+          <h1 className="text-3xl md:text-5xl font-black tracking-tight mb-3 leading-tight">
             {tHero("title1")}<br /><span className="gradient-text">{tHero("title2")}</span>
           </h1>
-          <p className="text-lg text-[#a0a0b0] max-w-2xl mx-auto mb-8 leading-relaxed">{tHero("subtitle")}</p>
+          <p className="text-base text-[#a0a0b0] max-w-xl mx-auto mb-6 leading-relaxed">{tHero("subtitle")}</p>
 
           {/* Live converter */}
           <EmbeddedConverter onSignIn={() => setShowSignIn(true)} />
