@@ -3,12 +3,43 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useUser } from "@/components/UserProvider";
 import { POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL, BACKEND_URL, GUEST_TOKEN, LANGUAGES } from "@/lib/constants";
 
 const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=landing";
+
+// ─── Scroll-reveal hook ────────────────────────────────────────────────────────
+function useInView(options?: IntersectionObserverInit) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); obs.disconnect(); }
+    }, { threshold: 0.12, ...options });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, visible };
+}
+
+// Reveal wrapper — fades + slides up children when scrolled into view
+function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const { ref, visible } = useInView();
+  return (
+    <div ref={ref} className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(32px)",
+        transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
+      }}>
+      {children}
+    </div>
+  );
+}
 
 // Chrome 2022 icon (flat 3-segment wheel)
 function ChromeIcon({ className }: { className?: string }) {
@@ -421,32 +452,36 @@ function DesignedForYou() {
   return (
     <section className="py-24 px-6">
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-14">
+        <Reveal className="text-center mb-14">
           <h2 className="text-3xl md:text-4xl font-bold text-[#f0f0f5] mb-4">Designed for <span className="gradient-text">You</span></h2>
           <p className="text-[#a0a0b0] text-lg">Whatever you do, Vid2Podcast saves you hours every week.</p>
-        </div>
+        </Reveal>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-          {personas.slice(0, 2).map((p) => (
-            <div key={p.label} className="relative rounded-2xl border p-8 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl cursor-default group"
-              style={{ background: p.gradient, borderColor: `${p.accent}25` }}>
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl"
-                style={{ background: `radial-gradient(circle at 30% 50%, ${p.accent}10 0%, transparent 60%)` }} />
-              <div className="text-5xl mb-4">{p.icon}</div>
-              <h3 className="text-xl font-bold text-[#f0f0f5] mb-3">{p.label}</h3>
-              <p className="text-sm text-[#a0a0b0] leading-relaxed">{p.desc}</p>
-            </div>
+          {personas.slice(0, 2).map((p, i) => (
+            <Reveal key={p.label} delay={i * 100}>
+              <div className="relative rounded-2xl border p-8 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl cursor-default group"
+                style={{ background: p.gradient, borderColor: `${p.accent}25` }}>
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl"
+                  style={{ background: `radial-gradient(circle at 30% 50%, ${p.accent}10 0%, transparent 60%)` }} />
+                <div className="text-5xl mb-4">{p.icon}</div>
+                <h3 className="text-xl font-bold text-[#f0f0f5] mb-3">{p.label}</h3>
+                <p className="text-sm text-[#a0a0b0] leading-relaxed">{p.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {personas.slice(2).map((p) => (
-            <div key={p.label} className="relative rounded-2xl border p-6 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl cursor-default group"
-              style={{ background: p.gradient, borderColor: `${p.accent}25` }}>
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl"
-                style={{ background: `radial-gradient(circle at 30% 50%, ${p.accent}10 0%, transparent 60%)` }} />
-              <div className="text-4xl mb-3">{p.icon}</div>
-              <h3 className="text-lg font-bold text-[#f0f0f5] mb-2">{p.label}</h3>
-              <p className="text-xs text-[#a0a0b0] leading-relaxed">{p.desc}</p>
-            </div>
+          {personas.slice(2).map((p, i) => (
+            <Reveal key={p.label} delay={i * 100}>
+              <div className="relative rounded-2xl border p-6 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl cursor-default group"
+                style={{ background: p.gradient, borderColor: `${p.accent}25` }}>
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl"
+                  style={{ background: `radial-gradient(circle at 30% 50%, ${p.accent}10 0%, transparent 60%)` }} />
+                <div className="text-4xl mb-3">{p.icon}</div>
+                <h3 className="text-lg font-bold text-[#f0f0f5] mb-2">{p.label}</h3>
+                <p className="text-xs text-[#a0a0b0] leading-relaxed">{p.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -464,12 +499,13 @@ function Testimonials() {
   return (
     <section className="py-24 px-6">
       <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-14">
+        <Reveal className="text-center mb-14">
           <h2 className="text-3xl md:text-4xl font-bold text-[#f0f0f5] mb-4">Real Stories, <span className="gradient-text">Real Results</span></h2>
-        </div>
+        </Reveal>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {reviews.map((r) => (
-            <div key={r.name} className="rounded-2xl border p-6 flex flex-col gap-4" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
+          {reviews.map((r, i) => (
+            <Reveal key={r.name} delay={i * 120}>
+            <div className="rounded-2xl border p-6 flex flex-col gap-4" style={{ background: "#111118", borderColor: "rgba(255,255,255,0.08)" }}>
               <div className="flex gap-0.5">
                 {Array.from({ length: r.stars }).map((_, i) => (
                   <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
@@ -486,6 +522,7 @@ function Testimonials() {
                 </div>
               </div>
             </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -715,14 +752,18 @@ function LandingInner() {
       {/* ── Features ── */}
       <section id="features" className="py-24 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
+          <Reveal className="text-center mb-16">
             <h2 className="text-4xl font-bold text-[#f0f0f5] mb-4">
               {tFeatures("heading")} <span className="gradient-text">{tFeatures("headingHighlight")}</span>
             </h2>
             <p className="text-[#a0a0b0] text-lg max-w-2xl mx-auto">{tFeatures("subheading")}</p>
-          </div>
+          </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {featureItems.map((f) => <FeatureCard key={f.title} icon={f.icon} title={f.title} desc={f.desc} />)}
+            {featureItems.map((f, i) => (
+              <Reveal key={f.title} delay={i * 80}>
+                <FeatureCard icon={f.icon} title={f.title} desc={f.desc} />
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
@@ -730,24 +771,26 @@ function LandingInner() {
       {/* ── How It Works ── */}
       <section className="py-24 px-6" style={{ background: "#111118" }}>
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
+          <Reveal className="text-center mb-16">
             <h2 className="text-4xl font-bold text-[#f0f0f5] mb-4">
               {tHow("heading1")} <span className="gradient-text">{tHow("heading2")}</span>
             </h2>
             <p className="text-[#a0a0b0] text-lg">{tHow("subheading")}</p>
-          </div>
+          </Reveal>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {steps.map((step, i) => (
-              <div key={step.num} className="relative text-center md:text-left">
-                {i < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-8 left-full w-full h-px -translate-x-8"
-                    style={{ background: "linear-gradient(90deg, rgba(139,92,246,0.4) 0%, transparent 100%)" }} />
-                )}
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl font-black text-xl mb-5"
-                  style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>{step.num}</div>
-                <h3 className="font-semibold text-[#f0f0f5] text-lg mb-3">{step.title}</h3>
-                <p className="text-sm text-[#a0a0b0] leading-relaxed">{step.desc}</p>
-              </div>
+              <Reveal key={step.num} delay={i * 120}>
+                <div className="relative text-center md:text-left">
+                  {i < steps.length - 1 && (
+                    <div className="hidden md:block absolute top-8 left-full w-full h-px -translate-x-8"
+                      style={{ background: "linear-gradient(90deg, rgba(139,92,246,0.4) 0%, transparent 100%)" }} />
+                  )}
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl font-black text-xl mb-5"
+                    style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>{step.num}</div>
+                  <h3 className="font-semibold text-[#f0f0f5] text-lg mb-3">{step.title}</h3>
+                  <p className="text-sm text-[#a0a0b0] leading-relaxed">{step.desc}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -762,17 +805,19 @@ function LandingInner() {
       {/* ── Pricing ── */}
       <section id="pricing" className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
+          <Reveal className="text-center mb-16">
             <h2 className="text-4xl font-bold text-[#f0f0f5] mb-4">
               {tPricing("heading1")} <span className="gradient-text">{tPricing("heading2")}</span>
             </h2>
             <p className="text-[#a0a0b0] text-lg">{tPricing("subheading")}</p>
-          </div>
+          </Reveal>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
-            <PricingCard name={tPricing("free.name")} price={tPricing("free.price")} desc={tPricing("free.desc")} features={freeFeatures} cta={tPricing("free.cta")} href="/app" />
-            <PricingCard name="Monthly" price="$9.99" period="/mo" desc="Full access, billed monthly" features={proFeatures} cta="Try Free 3 Days" trialBadge="3-day free trial" href={POLAR_MONTHLY_URL} />
-            <PricingCard name="Yearly" price="$79.99" period="/yr" desc="Full access — save 33% vs monthly" features={[...proFeatures, "Save $39.89 vs monthly"]} cta="Try Free 3 Days" trialBadge="3-day free trial" href={POLAR_YEARLY_URL} highlighted badge="Best Value" />
-            <PricingCard name="Lifetime" price="$149.99" period=" once" desc="Pay once, use forever — no recurring fees" features={[...proFeatures, "No recurring charges ever"]} cta="Get Lifetime Access" href={POLAR_LIFETIME_URL} />
+            {[
+              <PricingCard key="free" name={tPricing("free.name")} price={tPricing("free.price")} desc={tPricing("free.desc")} features={freeFeatures} cta={tPricing("free.cta")} href="/app" />,
+              <PricingCard key="monthly" name="Monthly" price="$9.99" period="/mo" desc="Full access, billed monthly" features={proFeatures} cta="Try Free 3 Days" trialBadge="3-day free trial" href={POLAR_MONTHLY_URL} />,
+              <PricingCard key="yearly" name="Yearly" price="$79.99" period="/yr" desc="Full access — save 33% vs monthly" features={[...proFeatures, "Save $39.89 vs monthly"]} cta="Try Free 3 Days" trialBadge="3-day free trial" href={POLAR_YEARLY_URL} highlighted badge="Best Value" />,
+              <PricingCard key="lifetime" name="Lifetime" price="$149.99" period=" once" desc="Pay once, use forever — no recurring fees" features={[...proFeatures, "No recurring charges ever"]} cta="Get Lifetime Access" href={POLAR_LIFETIME_URL} />,
+            ].map((card, i) => <Reveal key={i} delay={i * 80}>{card}</Reveal>)}
           </div>
         </div>
       </section>
@@ -780,42 +825,48 @@ function LandingInner() {
       {/* ── FAQ ── */}
       <section id="faq" className="py-24 px-6" style={{ background: "#111118" }}>
         <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-16">
+          <Reveal className="text-center mb-16">
             <h2 className="text-4xl font-bold text-[#f0f0f5] mb-4">
               {tFaq("heading1")} <span className="gradient-text">{tFaq("heading2")}</span>
             </h2>
-          </div>
+          </Reveal>
           <div className="space-y-3">
-            {faqItems.map((item) => <FaqItem key={item.q} q={item.q} a={item.a} />)}
+            {faqItems.map((item, i) => (
+              <Reveal key={item.q} delay={i * 60}>
+                <FaqItem q={item.q} a={item.a} />
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ── CTA Banner ── */}
       <section className="py-24 px-6">
-        <div className="max-w-4xl mx-auto text-center rounded-3xl p-12 border relative overflow-hidden"
-          style={{ background: "linear-gradient(135deg, #16102a 0%, #1a1a24 50%, #0d1a12 100%)", borderColor: "rgba(139,92,246,0.3)" }}>
-          <div className="absolute inset-0 opacity-30 pointer-events-none"
-            style={{ background: "radial-gradient(circle at 50% 0%, rgba(139,92,246,0.3) 0%, transparent 60%)" }} />
-          <div className="relative">
-            <h2 className="text-4xl font-bold text-[#f0f0f5] mb-4">
-              {tCta("heading1")} <span className="gradient-text">{tCta("heading2")}</span>
-            </h2>
-            <p className="text-[#a0a0b0] text-lg mb-8 max-w-xl mx-auto">{tCta("subheading")}</p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button onClick={() => setShowSignIn(true)}
-                className="px-8 py-4 rounded-xl font-semibold text-white text-lg transition-all duration-200 hover:opacity-90 hover:shadow-xl hover:shadow-purple-500/30"
-                style={{ background: "#8b5cf6" }}>
-                {tCta("cta1")}
-              </button>
-              <a href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer"
-                className="px-8 py-4 rounded-xl font-semibold border text-[#a0a0b0] text-lg transition-all duration-200 hover:text-[#f0f0f5] hover:bg-white/5"
-                style={{ borderColor: "rgba(255,255,255,0.15)" }}>
-                {tCta("cta2")}
-              </a>
+        <Reveal>
+          <div className="max-w-4xl mx-auto text-center rounded-3xl p-12 border relative overflow-hidden"
+            style={{ background: "linear-gradient(135deg, #16102a 0%, #1a1a24 50%, #0d1a12 100%)", borderColor: "rgba(139,92,246,0.3)" }}>
+            <div className="absolute inset-0 opacity-30 pointer-events-none"
+              style={{ background: "radial-gradient(circle at 50% 0%, rgba(139,92,246,0.3) 0%, transparent 60%)" }} />
+            <div className="relative">
+              <h2 className="text-4xl font-bold text-[#f0f0f5] mb-4">
+                {tCta("heading1")} <span className="gradient-text">{tCta("heading2")}</span>
+              </h2>
+              <p className="text-[#a0a0b0] text-lg mb-8 max-w-xl mx-auto">{tCta("subheading")}</p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button onClick={() => setShowSignIn(true)}
+                  className="px-8 py-4 rounded-xl font-semibold text-white text-lg transition-all duration-200 hover:opacity-90 hover:shadow-xl hover:shadow-purple-500/30"
+                  style={{ background: "#8b5cf6" }}>
+                  {tCta("cta1")}
+                </button>
+                <a href="https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer"
+                  className="px-8 py-4 rounded-xl font-semibold border text-[#a0a0b0] text-lg transition-all duration-200 hover:text-[#f0f0f5] hover:bg-white/5"
+                  style={{ borderColor: "rgba(255,255,255,0.15)" }}>
+                  {tCta("cta2")}
+                </a>
+              </div>
             </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* ── Footer ── */}
