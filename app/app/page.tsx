@@ -1035,13 +1035,12 @@ export default function ConverterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // AI summary — Desktop: Gemini Nano, Mobile: Groq API, Fallback: extractive
+  // AI summary — Groq for mobile (no Gemini Nano), Chrome AI for desktop
   useEffect(() => {
     if (!result) { setAiSummary(""); return; }
     setSummaryLoading(true);
-    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     if (isMobile) {
-      // Mobile: use Groq API
       fetch(`${BACKEND_URL}/api/ai`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
@@ -1052,8 +1051,7 @@ export default function ConverterPage() {
         .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
         .finally(() => setSummaryLoading(false));
     } else {
-      // Desktop: Gemini Nano → extractive fallback
-      freeAISummarize(result.transcript, { wordCount: 300, isPro: true })
+      freeAISummarize(result.transcript, { wordCount: FREE_SUMMARY_WORDS, isPro })
         .then((s) => setAiSummary(s))
         .catch(() => setAiSummary(summarize(result.transcript, { type: "descriptive", wordCount: FREE_SUMMARY_WORDS })))
         .finally(() => setSummaryLoading(false));
@@ -1394,21 +1392,23 @@ export default function ConverterPage() {
     setChatLoading(true);
 
     try {
-      const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
       let answer = "";
-      if (mobile) {
-        // Mobile: Groq API
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      if (isMobile) {
+        // Mobile: Gemini Nano unavailable → use Groq backend
         const res = await fetch(`${BACKEND_URL}/api/ai`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-v2p-token": WEB_TTS_TOKEN },
           body: JSON.stringify({ type: "chat", transcript: result.transcript, question }),
         });
-        if (!res.ok) throw new Error("AI request failed");
-        const data = await res.json();
-        answer = data.result ?? "I could not find an answer.";
-      } else {
-        // Desktop: Gemini Nano → keyword fallback
-        answer = await freeAIAnswer(result.transcript, question, true);
+        if (res.ok) {
+          const data = await res.json();
+          answer = data.result ?? "";
+        }
+      }
+      // Desktop: use Chrome AI (Gemini Nano) / extractive fallback
+      if (!answer) {
+        answer = await freeAIAnswer(result.transcript, question, isPro);
       }
       setChatMessages((prev) => [...prev, { role: "assistant", text: answer }]);
     } catch (e: unknown) {

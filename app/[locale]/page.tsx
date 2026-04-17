@@ -196,7 +196,7 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
 
       if (tab === "youtube") {
         const videoId = extractVideoId(ytUrl.trim());
-        if (!videoId) throw new Error("Invalid YouTube URL. Please paste a youtube.com link.");
+        if (!videoId) throw new Error("Invalid YouTube URL. Paste a youtube.com or youtu.be link.");
         setLoadMsg("Fetching transcript...");
         const res = await fetch(`${BACKEND_URL}/api/transcript`, {
           method: "POST",
