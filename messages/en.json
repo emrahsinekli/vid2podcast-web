@@ -3,11 +3,11 @@
     "features": "Features",
     "pricing": "Pricing",
     "faq": "FAQ",
-    "signIn": "Sign In",
-    "addToChrome": "Start Free"
+    "signIn": "Log In",
+    "addToChrome": "Add to Chrome — Free"
   },
   "hero": {
-    "badge": "Web App + Chrome Extension — Start Free",
+    "badge": "Chrome Extension + Web App — Free",
     "title1": "Turn Any YouTube Video",
     "title2": "Into a Podcast",
     "subtitle": "Instant transcript, AI summary, 50+ language translation, and natural audio playback — right in your browser or on the web.",

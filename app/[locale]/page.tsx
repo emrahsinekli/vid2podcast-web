@@ -7,6 +7,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useUser } from "@/components/UserProvider";
 import { POLAR_BUY_URL, POLAR_MONTHLY_URL, POLAR_YEARLY_URL, POLAR_LIFETIME_URL, BACKEND_URL, GUEST_TOKEN } from "@/lib/constants";
+
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/mfpcphpkfokoiellglchcegaciljehif?utm_source=landing";
 import { extractVideoId } from "@/lib/utils";
 
 // ─── Sign In Modal ─────────────────────────────────────────────────────────────
@@ -259,20 +261,20 @@ function EmbeddedConverter({ onSignIn }: { onSignIn: () => void }) {
   );
 }
 
-// ─── Stats Counter ─────────────────────────────────────────────────────────────
-function StatsCounter() {
+// ─── Social Proof & Logo Ticker ───────────────────────────────────────────────
+function SocialProof() {
   const tc = useTranslations("converter");
   const stats = [
-    { label: tc("statsVideos"), value: 12400, suffix: "+" },
-    { label: tc("statsLangs"), value: 30, suffix: "+" },
-    { label: tc("statsRating"), value: 4.9, suffix: "★", isFloat: true },
+    { label: tc("statsVideos"), value: 12400, suffix: "+", icon: "🏆" },
+    { label: tc("statsLangs"), value: 30, suffix: "+", icon: "🌍" },
+    { label: tc("statsRating"), value: 4.9, suffix: "★", isFloat: true, icon: "⭐" },
   ];
   const [counts, setCounts] = useState([0, 0, 0]);
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    const duration = 1500, interval = 25, steps = duration / interval;
+    const duration = 1800, interval = 25, steps = duration / interval;
     let step = 0;
     const t = setInterval(() => {
       step++;
@@ -283,14 +285,40 @@ function StatsCounter() {
     }, interval);
     return () => clearInterval(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const platforms = ["YouTube", "Vimeo", "Coursera", "TED", "LinkedIn", "Udemy", "Khan Academy", "Twitch", "Netflix", "Rumble", "DailyMotion", "Bilibili"];
+  const ticker = [...platforms, ...platforms];
+
   return (
-    <div className="grid grid-cols-3 gap-6 max-w-sm mx-auto mt-10">
-      {stats.map((s, i) => (
-        <div key={s.label} className="text-center">
-          <div className="text-2xl md:text-3xl font-black text-[#f0f0f5]">{counts[i]}{s.suffix}</div>
-          <div className="text-[10px] md:text-xs text-[#606070] mt-0.5 leading-tight">{s.label}</div>
+    <div className="mt-10 space-y-6">
+      {/* Award-style stat badges */}
+      <div className="flex items-center justify-center gap-4 md:gap-8 flex-wrap">
+        {stats.map((s, i) => (
+          <div key={s.label} className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <span className="text-xl">{s.icon}</span>
+            <div>
+              <div className="text-xl font-black text-[#f0f0f5] leading-none">{counts[i]}{s.suffix}</div>
+              <div className="text-[10px] text-[#606070] mt-0.5">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Scrolling platform ticker */}
+      <div className="relative overflow-hidden py-2">
+        <div className="absolute left-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
+          style={{ background: "linear-gradient(90deg, #0a0a0f 0%, transparent 100%)" }} />
+        <div className="absolute right-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
+          style={{ background: "linear-gradient(270deg, #0a0a0f 0%, transparent 100%)" }} />
+        <div className="flex gap-10 animate-ticker w-max">
+          {ticker.map((name, i) => (
+            <span key={i} className="text-sm font-semibold flex-shrink-0 select-none" style={{ color: "rgba(160,160,176,0.35)" }}>
+              {name}
+            </span>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   );
 }
@@ -540,6 +568,9 @@ function LandingInner() {
           -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
         .glow-purple { box-shadow: 0 0 60px rgba(139,92,246,0.15), 0 0 120px rgba(139,92,246,0.08); }
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-ticker { animation: ticker 30s linear infinite; }
+        .animate-ticker:hover { animation-play-state: paused; }
       `}</style>
 
       {showSignIn && <SignInModal onClose={closeModal} />}
@@ -558,20 +589,34 @@ function LandingInner() {
             <a href="#faq" className="text-sm text-[#a0a0b0] hover:text-[#f0f0f5] transition-colors">{tNav("faq")}</a>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <button onClick={() => setShowSignIn(true)} className="hidden sm:block text-sm text-[#a0a0b0] hover:text-[#f0f0f5] transition-colors px-3 py-1.5">
-              Sign In
-            </button>
-            <button onClick={() => setShowSignIn(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/25"
-              style={{ background: "#8b5cf6" }}>
+            <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:text-[#f0f0f5]"
+              style={{ color: "#a0a0b0", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="4" fill="#4285F4"/>
+                <path d="M12 8a4 4 0 100 8 4 4 0 000-8z" fill="#34A853" opacity="0"/>
+                <path fill="#EA4335" d="M20.5 12H12V8h8.5c.8 1.2 1.2 2.5 1.2 4s-.4 2.8-1.2 4z" opacity="0"/>
+                <circle cx="12" cy="12" r="10" fill="none" stroke="#4285F4" strokeWidth="2"/>
+                <circle cx="12" cy="12" r="6" fill="none" stroke="#FBBC04" strokeWidth="2"/>
+                <circle cx="12" cy="12" r="4" fill="#4285F4"/>
+                <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12h4a6 6 0 016-6V2z"/>
+                <path fill="#34A853" d="M22 12c0-5.52-4.48-10-10-10v4a6 6 0 010 12v4c5.52 0 10-4.48 10-10z"/>
+                <path fill="#FBBC04" d="M12 22c5.52 0 10-4.48 10-10h-4a6 6 0 01-6 6v4z"/>
+                <path fill="#4285F4" d="M2 12c0 5.52 4.48 10 10 10v-4a6 6 0 010-12V2C6.48 2 2 6.48 2 12z"/>
+              </svg>
               {tNav("addToChrome")}
+            </a>
+            <button onClick={() => setShowSignIn(true)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:shadow-purple-500/25"
+              style={{ background: "#8b5cf6" }}>
+              {tNav("signIn")}
             </button>
           </div>
         </div>
       </nav>
 
       {/* ── Hero ── */}
-      <section className="relative pt-32 pb-24 px-6 overflow-hidden">
+      <section className="relative pt-24 pb-16 px-6 overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full opacity-20"
             style={{ background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)", filter: "blur(80px)" }} />
@@ -581,18 +626,29 @@ function LandingInner() {
             style={{ background: "radial-gradient(circle, #22c55e 0%, transparent 70%)", filter: "blur(60px)" }} />
         </div>
         <div className="relative max-w-5xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium mb-8"
-            style={{ background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.3)", color: "#a78bfa" }}>
-            <span>✨</span><span>{tHero("badge")}</span>
-          </div>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 leading-tight">
+          <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full border text-sm font-medium mb-8 transition-all hover:scale-105 hover:shadow-lg group"
+            style={{ background: "rgba(66,133,244,0.08)", borderColor: "rgba(66,133,244,0.3)", color: "#93c5fd" }}>
+            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+              <path fill="#EA4335" d="M12 2C6.48 2 2 6.48 2 12h4a6 6 0 016-6V2z"/>
+              <path fill="#34A853" d="M22 12c0-5.52-4.48-10-10-10v4a6 6 0 010 12v4c5.52 0 10-4.48 10-10z"/>
+              <path fill="#FBBC04" d="M12 22c5.52 0 10-4.48 10-10h-4a6 6 0 01-6 6v4z"/>
+              <path fill="#4285F4" d="M2 12c0 5.52 4.48 10 10 10v-4a6 6 0 010-12V2C6.48 2 2 6.48 2 12z"/>
+              <circle cx="12" cy="12" r="4" fill="#4285F4"/>
+            </svg>
+            <span>{tHero("badge")}</span>
+            <svg className="w-3 h-3 opacity-60 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/>
+            </svg>
+          </a>
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-4 leading-tight">
             {tHero("title1")}<br /><span className="gradient-text">{tHero("title2")}</span>
           </h1>
-          <p className="text-xl text-[#a0a0b0] max-w-2xl mx-auto mb-10 leading-relaxed">{tHero("subtitle")}</p>
+          <p className="text-lg text-[#a0a0b0] max-w-2xl mx-auto mb-8 leading-relaxed">{tHero("subtitle")}</p>
 
           {/* Live converter */}
           <EmbeddedConverter onSignIn={() => setShowSignIn(true)} />
-          <StatsCounter />
+          <SocialProof />
         </div>
       </section>
 
