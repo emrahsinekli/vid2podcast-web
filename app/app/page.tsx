@@ -1656,24 +1656,33 @@ export default function ConverterPage() {
 
           {/* Language selector */}
           <div>
-            <label className="block text-xs font-medium text-[var(--text2)] mb-2 uppercase tracking-wider">Language</label>
+            <label className="block text-xs font-medium text-[var(--text2)] mb-2 uppercase tracking-wider">Output Language</label>
             <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-base leading-none">
+                {LANGUAGES.find((l) => l.code === language)?.flag ?? "🌐"}
+              </div>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="w-full py-2.5 pl-3 pr-8 rounded-xl text-sm text-[var(--text)] border outline-none focus:border-[#8b5cf6] transition-colors appearance-none"
-                style={{ background: "var(--bg)", borderColor: "var(--border)" }}
+                className="w-full py-2.5 pl-9 pr-9 rounded-xl text-sm font-medium text-[var(--text)] border outline-none transition-all appearance-none cursor-pointer"
+                style={{ background: "var(--bg2)", borderColor: language !== "original" ? "#8b5cf6" : "var(--border)" }}
               >
                 {LANGUAGES.map((l) => (
                   <option key={l.code} value={l.code}>{l.label}</option>
                 ))}
               </select>
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg className="w-4 h-4 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg className="w-3.5 h-3.5 text-[var(--text3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </div>
+            {language !== "original" && (
+              <p className="text-[10px] mt-1.5 flex items-center gap-1" style={{ color: "#a78bfa" }}>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" /></svg>
+                Transcript and audio will be in {LANGUAGES.find((l) => l.code === language)?.label.replace(/^[^ ]+ /, "")}
+              </p>
+            )}
           </div>
         </div>
 
